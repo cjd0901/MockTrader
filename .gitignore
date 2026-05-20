@@ -1,0 +1,24 @@
+# Rust
+/target/
+
+# Qt / CMake
+/client/build/
+/client/cmake-build-debug/
+/client/.qt/
+
+# IDE
+.idea/
+*.user
+.vscode/
+
+# OS
+.DS_Store
+**/.DS_Store
+
+# Local config & secrets
+.env
+
+# Generated / local data (keep scripts, ignore bulky outputs)
+/data/kline/**/*.bin
+/data/**/*.db
+/data/**/*.db-journal

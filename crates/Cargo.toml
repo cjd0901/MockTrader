@@ -1,0 +1,11 @@
+[package]
+name = "mock-trader"
+version.workspace = true
+edition.workspace = true
+description = "TCP API serving 5-minute kline binaries for MockTrader"
+
+[dependencies]
+anyhow = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
