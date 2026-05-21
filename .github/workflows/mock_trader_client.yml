@@ -1,0 +1,29 @@
+name: mock_trader_client CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        modules: 'qtcharts'
+        cache: true
+        
+    - name: Configure with CMake
+      run: cmake -S . -B build
+      working-directory: ./client
+      
+    - name: make
+      run: make
+      working-directory: ./client/build
