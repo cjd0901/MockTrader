@@ -1,67 +1,119 @@
+<div align="center">
+
+<img src="docs/logo.png" alt="MockTrader" width="160" />
+
 # MockTrader
 
-本地 5 分钟 K 线查看工具：**Rust TCP 服务端**从二进制文件读取行情，**Qt6 客户端**展示蜡烛图。
+**Quantitative historical backtesting with simulated execution and chart review**
+
+[中文文档](README.zh-CN.md)
+
+</div>
+
+---
+
+MockTrader is a **local-first quantitative backtesting platform** for Chinese A-share (and similar) intraday history. It replays historical 5-minute bars, runs **custom indicator strategies**, **simulates order placement**, and **splits large parent orders into child fills**—then overlays **buy/sell markers** on the candlestick chart and reports **PnL / returns**.
+
+The stack is a **Rust TCP server** (data + indicators + future simulation engine) and a **Qt 6 desktop client** (charts, controls, results).
+
+## Highlights
+
+| Capability | Description |
+|------------|-------------|
+| **Strategy backtest** | Run your own quantitative rules on historical bars and step through time bar-by-bar. |
+| **Simulated orders** | Model automatic buy/sell signals with realistic timing on each bar. |
+| **Large-order splitting** | Simulate breaking a parent block order into smaller child orders over multiple bars. |
+| **Chart review** | Candlesticks with MACD / KDJ; inspect entries, exits, and trade markers on the K-line. |
+| **Performance** | Review per-trade and aggregate returns, win rate, and equity curve (planned UI). |
+| **Local data** | No cloud dependency; K-lines stored as compact binary files on disk. |
+
+## Status
+
+| Area | State |
+|------|--------|
+| 5-minute K-line storage & TCP API | **Available** |
+| Candlestick chart, timeline scroll, prefetch | **Available** |
+| MACD / KDJ (server-side, 48-byte indicator payload) | **Available** |
+| Strategy engine, order simulator, TWAP/split logic | **Planned** |
+| Buy/sell markers & PnL panel on chart | **Planned** |
+
+> The README describes the **product direction**. Implemented pieces are marked **Available**; trading simulation and backtest reporting are on the roadmap.
+
+## Architecture
 
 ```
 MockTrader/
 ├── Cargo.toml              # Rust workspace
-├── crates/                 # 服务端 mock-trader
-├── client/                 # Qt 客户端 mock_trader_client
+├── crates/                 # mock-trader server (TCP, kline, indicators, …)
+├── client/                 # Qt 6 desktop client
+├── docs/
+│   └── logo.png
 └── data/
-    ├── scripts/get_5min.py # 从 baostock 生成 .bin
-    └── kline/5min/         # K 线数据（*.bin，默认不入库）
+    ├── scripts/get_5min.py # Download & build .bin from baostock
+    └── kline/5min/         # Historical bars (*.bin, gitignored by default)
 ```
 
-## 功能概览
+```mermaid
+flowchart LR
+  subgraph client [Qt Client]
+    UI[Charts & controls]
+    BT[Backtest UI - planned]
+  end
+  subgraph server [Rust Server]
+    IO[K-line reader]
+    IND[Indicators MACD/KDJ]
+    SIM[Order simulator - planned]
+  end
+  BIN[(.bin files)]
+  UI -->|TCP binary| IO
+  IO --> BIN
+  IND --> IO
+  SIM --> IO
+  BT --> UI
+```
 
-| 模块 | 说明 |
-|------|------|
-| 服务端 | TCP 长连接，按索引分页返回原始 32 字节 K 线 |
-| 客户端 | 一屏 100 根蜡烛；底部滚动条浏览；可见区间最高/最低价标注 |
-| 配色 | 涨红跌绿（收盘 ≥ 开盘为涨），无黑色描边，影线与实体同色 |
+## Prepare K-line data
 
-## 准备 K 线数据
-
-依赖 Python 3、`baostock`、`pandas`。
+Requires Python 3, `baostock`, and `pandas`.
 
 ```bash
 pip install baostock pandas
 python data/scripts/get_5min.py
 ```
 
-生成路径示例：`data/kline/5min/立讯精密_002475.bin`。
+Output example: `data/kline/5min/立讯精密_002475.bin`.
 
-### 二进制格式（每条 32 字节，小端 int32×8）
+### Binary record (32 bytes, little-endian `i32` × 8)
 
-| 字段 | 说明 |
-|------|------|
-| date | `YYYYMMDD` |
-| time | `HHmmss`（由 baostock 时间串第 8–14 位得到，如 `093500`） |
-| open / high / low / close | 价格 ×100 的整数 |
-| volume | 成交量 |
-| amount | 成交额 ÷10000 的整数 |
+| Field | Description |
+|-------|-------------|
+| `date` | `YYYYMMDD` |
+| `time` | `HHmmss` (e.g. `093500` from baostock time string) |
+| `open` / `high` / `low` / `close` | Price × 100 as integer |
+| `volume` | Volume |
+| `amount` | Amount ÷ 10000 as integer |
 
-文件名：`{名称}_{代码}.bin`。
+File name: `{display_name}_{symbol}.bin`.
 
-> 若曾用旧版脚本（`time` 使用 `slice(-6)`），请重新执行 `get_5min.py` 覆盖数据。
+> If you used an older script with `time` from `slice(-6)` only, re-run `get_5min.py` to refresh files.
 
-## 运行服务端
+## Run the server
 
-在项目根目录：
+From the repository root:
 
 ```bash
 cargo run -p mock-trader
 ```
 
-| 环境变量 | 默认值 |
-|----------|--------|
+| Variable | Default |
+|----------|---------|
 | `TRADING_HOST` | `0.0.0.0` |
 | `TRADING_PORT` | `9000` |
 | `KLINE_DIR` | `data/kline/5min` |
 
-## 构建并运行客户端
+## Build & run the client
 
-需要 Qt **6.5+**（Core、Gui、Widgets、Network、Charts）。
+Requires **Qt 6.5+** (Core, Gui, Widgets, Network, Charts).
 
 ```bash
 cd client
@@ -70,45 +122,51 @@ cmake --build build -j
 ./build/mock_trader_client
 ```
 
-| 环境变量 | 默认值 |
-|----------|--------|
+| Variable | Default |
+|----------|---------|
 | `TRADING_TCP_HOST` | `127.0.0.1` |
 | `TRADING_TCP_PORT` | `9000` |
 
-## 客户端使用说明
+## Client workflow (current)
 
-1. 启动服务端后打开客户端，首页列出 `KLINE_DIR` 下所有 `.bin` 股票。
-2. 进入详情后加载最近约 **180 个交易日** 的 5 分钟线（内存中），图表默认显示**最新 100 根**。
-3. 拖动图表**下方滚动条**查看更早 K 线；接近已加载左边界时自动再请求约 30 个交易日数据。
-4. 当前可见区间内**最高价**（红字）、**最低价**（绿字）标注在对应蜡烛旁，随滚动更新。
+1. Start the server, then launch the client. The home screen lists all `.bin` symbols under `KLINE_DIR`.
+2. Open a symbol to load recent 5-minute history (~180 trading days in memory) and show the **latest 100 bars** by default.
+3. Drag the **timeline** at the bottom to scroll; older bars are prefetched near the left edge.
+4. View **MACD** (DIF, DEA, histogram) and **KDJ** computed on the server; colored readouts match chart lines.
+5. Double-click the main chart for OHLC detail; high/low labels track the visible window.
 
-加载条数可在 `client/src/KlineLoadConfig.h` 调整（`VisibleBarCount`、`InitialBarLimit` 等）。
+Tune bar counts in `client/src/KlineLoadConfig.h` (`VisibleBarCount`, `InitialBarLimit`, etc.).
 
-## TCP 协议（二进制帧）
+## TCP protocol (binary frames)
 
-帧结构：`[u8 消息类型][u32 小端 payload 长度][payload]`
+Frame: `[u8 type][u32 LE payload length][payload]`
 
-| 类型 | 值 | 方向 | 说明 |
-|------|-----|------|------|
-| ListStocks | 1 | C→S | 无 payload |
-| GetCandles | 2 | C→S | symbol + 可选 `before_index` + `limit` |
-| StockList | 101 | S→C | 股票列表 UTF-8 |
-| CandleChunk | 102 | S→C | `start_index`、`total`、**N×32 字节原始 K 线** |
-| Error | 255 | S→C | 错误文本 |
+| Type | Value | Direction | Description |
+|------|-------|-----------|-------------|
+| `ListStocks` | 1 | C→S | Empty payload |
+| `GetCandles` | 2 | C→S | `symbol` + optional `before_index` + `limit` |
+| `StockList` | 101 | S→C | UTF-8 stock list |
+| `CandleChunk` | 102 | S→C | `start_index`, `total`, raw K-line bytes, indicator bytes |
+| `Error` | 255 | S→C | Error text |
 
-`GetCandles` 未带 `before_index` 时返回文件末尾（最新）的 `limit` 条记录。
+Each bar: **32-byte candle** + **48-byte indicators** (6× `f64` LE: `macd_dif`, `macd_dea`, `macd_bar`, `kdj_k`, `kdj_d`, `kdj_j`).
 
-协议细节见 `crates/src/protocol/binary.rs`。
+`GetCandles` without `before_index` returns the latest `limit` records at the end of the file.
 
-## 开发说明
+Details: `crates/src/protocol/binary.rs`.
+
+## Development
 
 ```bash
-# 服务端单元测试
 cargo test -p mock-trader
-
-# 清理构建产物
 cargo clean
 rm -rf client/build
 ```
 
-`.gitignore` 已忽略 `target/`、`client/build/`、`.idea/`、本地 `*.bin` 与数据库文件。
+CI workflows: `.github/workflows/mock_trader_server.yml`, `mock_trader_client.yml`.
+
+`.gitignore` excludes `target/`, `client/build/`, local `*.bin`, and IDE metadata.
+
+## License
+
+See repository license file if present; otherwise treat as private / all rights reserved by the project owner.
