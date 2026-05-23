@@ -26,11 +26,13 @@ struct IndicatorBar
 {
     double macdDif = 0.0;
     double macdDea = 0.0;
+    double macdBar = 0.0;
     double kdjK = 0.0;
     double kdjD = 0.0;
     double kdjJ = 0.0;
     bool macdDifValid = false;
     bool macdDeaValid = false;
+    bool macdBarValid = false;
     bool kdjKValid = false;
     bool kdjDValid = false;
     bool kdjJValid = false;
@@ -39,7 +41,7 @@ struct IndicatorBar
 namespace KlineBinary {
 
 constexpr int RecordSize = 32;
-constexpr int IndicatorValuesSize = 40;
+constexpr int IndicatorValuesSize = 48;
 
 constexpr quint8 MsgReqListStocks = 1;
 constexpr quint8 MsgReqGetCandles = 2;

@@ -103,6 +103,11 @@ const QColor kEastMoneyDown{0x1B, 0xAA, 0x3A};
 const QColor kLabelHighColor{0xF0, 0x3E, 0x3E};
 const QColor kLabelLowColor{0x1B, 0xAA, 0x3A};
 const QColor kSubChartTitleColor{0x66, 0x66, 0x66};
+const QColor kMacdDifColor{0x44, 0x88, 0xFF};
+const QColor kMacdDeaColor{0xFF, 0x88, 0x00};
+const QColor kKdjKColor{0xFF, 0xC1, 0x07};
+const QColor kKdjDColor{0x42, 0x85, 0xF4};
+const QColor kKdjJColor{0xAB, 0x47, 0xBC};
 
 QGraphicsTextItem *makeChartLabel(const QString &text, const QColor &color, QChart *chart,
                                 bool bold = false, int pointSize = 9)
@@ -133,6 +138,17 @@ void styleLineSeries(QLineSeries *series, const QColor &color, int width = 1)
     QPen pen(color, width);
     series->setPen(pen);
     series->setBrush(Qt::NoBrush);
+}
+
+void clearBarSet(QBarSet *set)
+{
+    if (!set) {
+        return;
+    }
+    const int n = set->count();
+    if (n > 0) {
+        set->remove(0, n);
+    }
 }
 
 void hideAxis(QValueAxis *axis)
@@ -222,19 +238,45 @@ QString formatIndicatorValue(double value, bool valid, int decimals)
     return QString::number(value, 'f', decimals);
 }
 
-QString formatMacdReadout(const IndicatorBar &ind)
+QString htmlColoredText(const QColor &color, const QString &text)
 {
-    return QStringLiteral("DIF:%1  DEA:%2")
-        .arg(formatIndicatorValue(ind.macdDif, ind.macdDifValid, 3),
-             formatIndicatorValue(ind.macdDea, ind.macdDeaValid, 3));
+    return QStringLiteral("<span style=\"color:%1\">%2</span>")
+        .arg(color.name(QColor::HexRgb), text.toHtmlEscaped());
 }
 
-QString formatKdjReadout(const IndicatorBar &ind)
+QColor macdBarReadoutColor(const IndicatorBar &ind)
 {
-    return QStringLiteral("K:%1  D:%2  J:%3")
-        .arg(formatIndicatorValue(ind.kdjK, ind.kdjKValid, 2),
-             formatIndicatorValue(ind.kdjD, ind.kdjDValid, 2),
-             formatIndicatorValue(ind.kdjJ, ind.kdjJValid, 2));
+    if (!ind.macdBarValid || !std::isfinite(ind.macdBar)) {
+        return kSubChartTitleColor;
+    }
+    return ind.macdBar >= 0.0 ? kEastMoneyUp : kEastMoneyDown;
+}
+
+QString formatMacdReadoutHtml(const IndicatorBar &ind)
+{
+    const QString dif =
+        QStringLiteral("DIF:%1").arg(formatIndicatorValue(ind.macdDif, ind.macdDifValid, 3));
+    const QString dea =
+        QStringLiteral("DEA:%1").arg(formatIndicatorValue(ind.macdDea, ind.macdDeaValid, 3));
+    const QString bar =
+        QStringLiteral("MACD:%1").arg(formatIndicatorValue(ind.macdBar, ind.macdBarValid, 3));
+
+    return htmlColoredText(kMacdDifColor, dif) + QStringLiteral("&nbsp;&nbsp;")
+        + htmlColoredText(kMacdDeaColor, dea) + QStringLiteral("&nbsp;&nbsp;")
+        + htmlColoredText(macdBarReadoutColor(ind), bar);
+}
+
+QString formatKdjReadoutHtml(const IndicatorBar &ind)
+{
+    const QString k =
+        QStringLiteral("K:%1").arg(formatIndicatorValue(ind.kdjK, ind.kdjKValid, 2));
+    const QString d =
+        QStringLiteral("D:%1").arg(formatIndicatorValue(ind.kdjD, ind.kdjDValid, 2));
+    const QString j =
+        QStringLiteral("J:%1").arg(formatIndicatorValue(ind.kdjJ, ind.kdjJValid, 2));
+
+    return htmlColoredText(kKdjKColor, k) + QStringLiteral("&nbsp;&nbsp;") + htmlColoredText(kKdjDColor, d)
+        + QStringLiteral("&nbsp;&nbsp;") + htmlColoredText(kKdjJColor, j);
 }
 
 QString formatCandleDetail(const CandleBar &bar)
@@ -291,6 +333,7 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     , m_axisY(new QValueAxis())
     , m_seriesUp(new QCandlestickSeries())
     , m_seriesDown(new QCandlestickSeries())
+    , m_macdHist(new QBarSeries())
     , m_macdDif(new QLineSeries())
     , m_macdDea(new QLineSeries())
     , m_kdjK(new QLineSeries())
@@ -340,19 +383,29 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     m_view->viewport()->installEventFilter(this);
 
     setupSubChart(m_macdChart, QStringLiteral("MACD"));
-    styleLineSeries(m_macdDif, QColor(0x44, 0x88, 0xFF), 1);
-    styleLineSeries(m_macdDea, QColor(0xFF, 0x88, 0x00), 1);
+    m_macdHist->setBarWidth(0.72);
+    m_macdHistUp = new QBarSet(QStringLiteral("up"));
+    m_macdHistUp->setColor(kEastMoneyUp);
+    m_macdHistDown = new QBarSet(QStringLiteral("down"));
+    m_macdHistDown->setColor(kEastMoneyDown);
+    m_macdHist->append(m_macdHistUp);
+    m_macdHist->append(m_macdHistDown);
+    styleLineSeries(m_macdDif, kMacdDifColor, 1);
+    styleLineSeries(m_macdDea, kMacdDeaColor, 1);
+    m_macdChart.chart->addSeries(m_macdHist);
     m_macdChart.chart->addSeries(m_macdDif);
     m_macdChart.chart->addSeries(m_macdDea);
+    m_macdHist->attachAxis(m_macdChart.axisX);
+    m_macdHist->attachAxis(m_macdChart.axisY);
     for (QLineSeries *s : {m_macdDif, m_macdDea}) {
         s->attachAxis(m_macdChart.axisX);
         s->attachAxis(m_macdChart.axisY);
     }
 
     setupSubChart(m_kdjChart, QStringLiteral("KDJ"));
-    styleLineSeries(m_kdjK, QColor(0xFF, 0xC1, 0x07), 1);
-    styleLineSeries(m_kdjD, QColor(0x42, 0x85, 0xF4), 1);
-    styleLineSeries(m_kdjJ, QColor(0xAB, 0x47, 0xBC), 1);
+    styleLineSeries(m_kdjK, kKdjKColor, 1);
+    styleLineSeries(m_kdjD, kKdjDColor, 1);
+    styleLineSeries(m_kdjJ, kKdjJColor, 1);
     m_kdjChart.chart->addSeries(m_kdjK);
     m_kdjChart.chart->addSeries(m_kdjD);
     m_kdjChart.chart->addSeries(m_kdjJ);
@@ -446,6 +499,8 @@ void StockDetailPage::resetCandles()
     m_extremaLocalLowIdx = -1;
     m_seriesUp->clear();
     m_seriesDown->clear();
+    clearBarSet(m_macdHistUp);
+    clearBarSet(m_macdHistDown);
     m_macdDif->clear();
     m_macdDea->clear();
     m_kdjK->clear();
@@ -584,18 +639,18 @@ void StockDetailPage::updateIndicatorReadouts(int barIndex)
 {
     if (barIndex < 0 || barIndex >= m_indicators.size()) {
         if (m_macdChart.values) {
-            m_macdChart.values->setPlainText(QString());
+            m_macdChart.values->setHtml(QString());
         }
         if (m_kdjChart.values) {
-            m_kdjChart.values->setPlainText(QString());
+            m_kdjChart.values->setHtml(QString());
         }
         updateSubChartHeaders();
         return;
     }
 
     const IndicatorBar &ind = m_indicators[barIndex];
-    m_macdChart.values->setPlainText(formatMacdReadout(ind));
-    m_kdjChart.values->setPlainText(formatKdjReadout(ind));
+    m_macdChart.values->setHtml(formatMacdReadoutHtml(ind));
+    m_kdjChart.values->setHtml(formatKdjReadoutHtml(ind));
     updateSubChartHeaders();
 }
 
@@ -689,15 +744,33 @@ bool StockDetailPage::eventFilter(QObject *watched, QEvent *event)
 
 void StockDetailPage::renderMacdChart(int start, int end)
 {
+    clearBarSet(m_macdHistUp);
+    clearBarSet(m_macdHistDown);
     m_macdDif->clear();
     m_macdDea->clear();
 
     QVector<double> samples;
-    samples.reserve((end - start) * 2);
+    samples.reserve((end - start) * 3);
 
     for (int i = start; i < end; ++i) {
         const IndicatorBar &ind = m_indicators[i];
         const qreal x = static_cast<qreal>(i - start);
+
+        if (ind.macdBarValid) {
+            const double bar = ind.macdBar;
+            if (bar >= 0.0) {
+                m_macdHistUp->append(bar);
+                m_macdHistDown->append(0.0);
+            } else {
+                m_macdHistUp->append(0.0);
+                m_macdHistDown->append(bar);
+            }
+            samples.append(bar);
+        } else {
+            m_macdHistUp->append(0.0);
+            m_macdHistDown->append(0.0);
+        }
+
         if (ind.macdDifValid) {
             m_macdDif->append(x, ind.macdDif);
             samples.append(ind.macdDif);
@@ -708,6 +781,7 @@ void StockDetailPage::renderMacdChart(int start, int end)
         }
     }
 
+    samples.append(0.0);
     fitAxisY(m_macdChart.axisY, samples);
 }
 
@@ -754,6 +828,8 @@ void StockDetailPage::renderVisibleWindow()
     if (m_candles.isEmpty()) {
         m_labelHigh->hide();
         m_labelLow->hide();
+        clearBarSet(m_macdHistUp);
+        clearBarSet(m_macdHistDown);
         m_macdDif->clear();
         m_macdDea->clear();
         m_kdjK->clear();

@@ -2,6 +2,8 @@
 
 #include "net/KlineBinary.h"
 
+#include <QtCharts/QBarSeries>
+#include <QtCharts/QBarSet>
 #include <QtCharts/QCandlestickSeries>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
@@ -79,6 +81,9 @@ private:
     QCandlestickSeries *m_seriesDown = nullptr;
 
     SubChart m_macdChart;
+    QBarSeries *m_macdHist = nullptr;
+    QBarSet *m_macdHistUp = nullptr;
+    QBarSet *m_macdHistDown = nullptr;
     QLineSeries *m_macdDif = nullptr;
     QLineSeries *m_macdDea = nullptr;
 

@@ -84,6 +84,7 @@ impl KlineStore {
         let window = IndicatorSeriesSlice {
             macd_dif: &series.macd_dif[offset..],
             macd_dea: &series.macd_dea[offset..],
+            macd_bar: &series.macd_bar[offset..],
             kdj_k: &series.kdj_k[offset..],
             kdj_d: &series.kdj_d[offset..],
             kdj_j: &series.kdj_j[offset..],
@@ -130,6 +131,7 @@ fn parse_stock_from_filename(name: Option<&str>) -> Option<StockEntry> {
 struct IndicatorSeriesSlice<'a> {
     macd_dif: &'a [f64],
     macd_dea: &'a [f64],
+    macd_bar: &'a [f64],
     kdj_k: &'a [f64],
     kdj_d: &'a [f64],
     kdj_j: &'a [f64],
@@ -141,6 +143,7 @@ fn encode_values_slice(s: &IndicatorSeriesSlice<'_>) -> Vec<u8> {
     for i in 0..n {
         out.extend_from_slice(&s.macd_dif[i].to_le_bytes());
         out.extend_from_slice(&s.macd_dea[i].to_le_bytes());
+        out.extend_from_slice(&s.macd_bar[i].to_le_bytes());
         out.extend_from_slice(&s.kdj_k[i].to_le_bytes());
         out.extend_from_slice(&s.kdj_d[i].to_le_bytes());
         out.extend_from_slice(&s.kdj_j[i].to_le_bytes());

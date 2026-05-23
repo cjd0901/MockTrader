@@ -151,11 +151,13 @@ QVector<IndicatorBar> decodeIndicators(const QByteArray &indicators, int barCoun
         IndicatorBar b;
         b.macdDif = readF64(base);
         b.macdDea = readF64(base + 8);
-        b.kdjK = readF64(base + 16);
-        b.kdjD = readF64(base + 24);
-        b.kdjJ = readF64(base + 32);
+        b.macdBar = readF64(base + 16);
+        b.kdjK = readF64(base + 24);
+        b.kdjD = readF64(base + 32);
+        b.kdjJ = readF64(base + 40);
         b.macdDifValid = std::isfinite(b.macdDif);
         b.macdDeaValid = std::isfinite(b.macdDea);
+        b.macdBarValid = std::isfinite(b.macdBar);
         b.kdjKValid = std::isfinite(b.kdjK);
         b.kdjDValid = std::isfinite(b.kdjD);
         b.kdjJValid = std::isfinite(b.kdjJ);

@@ -9,6 +9,8 @@ const KDJ_PERIOD: usize = 9;
 pub struct IndicatorSeries {
     pub macd_dif: Vec<f64>,
     pub macd_dea: Vec<f64>,
+    /// MACD 柱 = 2×(DIF−DEA)
+    pub macd_bar: Vec<f64>,
     pub kdj_k: Vec<f64>,
     pub kdj_d: Vec<f64>,
     pub kdj_j: Vec<f64>,
@@ -19,6 +21,7 @@ pub fn compute_from_ohlc(closes: &[f64], highs: &[f64], lows: &[f64]) -> Indicat
     let mut out = IndicatorSeries {
         macd_dif: vec![f64::NAN; n],
         macd_dea: vec![f64::NAN; n],
+        macd_bar: vec![f64::NAN; n],
         kdj_k: vec![f64::NAN; n],
         kdj_d: vec![f64::NAN; n],
         kdj_j: vec![f64::NAN; n],
@@ -33,6 +36,11 @@ pub fn compute_from_ohlc(closes: &[f64], highs: &[f64], lows: &[f64]) -> Indicat
             }
         }
         out.macd_dea = ema_skip_nan(&out.macd_dif, MACD_SIGNAL);
+        for i in 0..n {
+            if out.macd_dif[i].is_finite() && out.macd_dea[i].is_finite() {
+                out.macd_bar[i] = 2.0 * (out.macd_dif[i] - out.macd_dea[i]);
+            }
+        }
     }
 
     if n > 0 && KDJ_PERIOD > 0 {
@@ -66,8 +74,8 @@ pub fn compute_from_ohlc(closes: &[f64], highs: &[f64], lows: &[f64]) -> Indicat
     out
 }
 
-/// 5×f64 LE per bar: dif, dea, k, d, j
-pub const INDICATOR_VALUES_SIZE: usize = 40;
+/// 6×f64 LE per bar: dif, dea, bar, k, d, j
+pub const INDICATOR_VALUES_SIZE: usize = 48;
 
 fn ema(src: &[f64], period: usize) -> Vec<f64> {
     let n = src.len();
@@ -127,5 +135,21 @@ mod tests {
         assert_eq!(s.macd_dif.len(), 80);
         assert!(s.macd_dif[MACD_SLOW - 2].is_nan());
         assert!(s.macd_dif[MACD_SLOW - 1].is_finite());
+    }
+
+    #[test]
+    fn macd_bar_is_twice_dif_minus_dea() {
+        let closes: Vec<f64> = (0..80).map(|i| 10.0 + i as f64 * 0.01).collect();
+        let highs = closes.clone();
+        let lows = closes.clone();
+        let s = compute_from_ohlc(&closes, &highs, &lows);
+        for i in 0..80 {
+            if s.macd_bar[i].is_finite() {
+                let expected = 2.0 * (s.macd_dif[i] - s.macd_dea[i]);
+                assert!((s.macd_bar[i] - expected).abs() < 1e-9);
+            } else {
+                assert!(s.macd_bar[i].is_nan());
+            }
+        }
     }
 }
