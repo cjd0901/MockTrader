@@ -1,3 +1,4 @@
+#include "AppBranding.h"
 #include "AppStyle.h"
 #include "MainWindow.h"
 
@@ -9,6 +10,7 @@ int main(int argc, char *argv[])
     AppStyle::applyFixedLightTheme(app);
     QApplication::setApplicationName(QStringLiteral("MockTrader"));
     QApplication::setOrganizationName(QStringLiteral("MockTrader"));
+    QApplication::setWindowIcon(AppBranding::applicationIcon());
 
     MainWindow w;
     w.resize(1100, 720);

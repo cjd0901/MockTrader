@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "AppBranding.h"
 #include "KlineLoadConfig.h"
 #include "net/TcpTradingClient.h"
 #include "pages/HomePage.h"
@@ -43,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_stack->setStyleSheet(QStringLiteral("background-color:#FFFFFF;"));
 
     setStyleSheet(QStringLiteral("QMainWindow{background-color:#FFFFFF;}"));
+    setWindowIcon(AppBranding::applicationIcon());
     setWindowTitle(tr("MockTrader"));
 
     wireConnections();

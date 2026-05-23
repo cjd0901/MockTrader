@@ -12,7 +12,10 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Charts)
 qt_standard_project_setup()
 
 add_executable(mock_trader_client
+    resources/resources.qrc
     src/KlineLoadConfig.h
+    src/AppBranding.cpp
+    src/AppBranding.h
     src/AppStyle.cpp
     src/AppStyle.h
     src/main.cpp
