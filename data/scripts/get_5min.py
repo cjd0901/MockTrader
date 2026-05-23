@@ -1,15 +1,13 @@
 import baostock as bs
 import pandas as pd
 import struct
-import toml  # 这里改了
+import toml
 from pathlib import Path
 
-# ===================== 固定配置 =====================
 START_DATE = "1990-12-19"
 END_DATE = "2026-05-20"
 FREQ = "5"
 ADJUSTFLAG = "3"
-# ======================================================
 
 def load_stocks_config():
     """加载同目录下的 stocks.toml"""
@@ -19,10 +17,8 @@ def load_stocks_config():
     return config["stock"]
 
 def download_and_save_32byte_bin(stock_code, stock_name):
-    # output 硬编码在代码里
     output_file = f"data/kline/5min/{stock_name}_{stock_code.split('.')[1]}.bin"
 
-    # 自动创建目录
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     print(f"正在拉取 {stock_name}({stock_code}) 5分钟线...")
@@ -44,7 +40,6 @@ def download_and_save_32byte_bin(stock_code, stock_name):
 
     df = pd.DataFrame(data_list, columns=rs.fields)
 
-    # 数据处理
     df["date"] = df["date"].str.replace("-", "").astype(int)
     df["time"] = df["time"].str.slice(8, 14).astype(int)
 
@@ -55,7 +50,6 @@ def download_and_save_32byte_bin(stock_code, stock_name):
     df["volume"] = df["volume"].astype(int)
     df["amount"] = (df["amount"].astype(float) / 10000).astype(int)
 
-    # 写入 32 字节二进制
     with open(output_file, "wb") as f:
         for _, row in df.iterrows():
             buf = struct.pack(

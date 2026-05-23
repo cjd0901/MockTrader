@@ -1,5 +1,3 @@
-//! Application configuration loaded from environment variables.
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 

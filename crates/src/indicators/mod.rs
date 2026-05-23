@@ -1,5 +1,3 @@
-//! MACD (12, 26, 9) and KDJ (9) — aligned with the former Qt client logic.
-
 const MACD_FAST: usize = 12;
 const MACD_SLOW: usize = 26;
 const MACD_SIGNAL: usize = 9;

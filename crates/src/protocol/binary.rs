@@ -1,5 +1,3 @@
-//! Binary TCP protocol. K线 payload 与 `get_5min.py` 一致：每条 32 字节、8×i32 小端。
-
 use anyhow::{bail, Context};
 
 pub const KLINE_RECORD_SIZE: usize = 32;

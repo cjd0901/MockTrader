@@ -1,5 +1,3 @@
-//! Reads 32-byte little-endian candle records from `data/kline/5min/*.bin`.
-
 mod parse;
 
 use std::path::PathBuf;
