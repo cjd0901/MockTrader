@@ -13,6 +13,8 @@ qt_standard_project_setup()
 
 add_executable(mock_trader_client
     src/KlineLoadConfig.h
+    src/AppStyle.cpp
+    src/AppStyle.h
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
@@ -20,6 +22,10 @@ add_executable(mock_trader_client
     src/pages/HomePage.h
     src/pages/StockDetailPage.cpp
     src/pages/StockDetailPage.h
+    src/widgets/KlineTimelineBar.cpp
+    src/widgets/KlineTimelineBar.h
+    src/widgets/StockListDelegate.cpp
+    src/widgets/StockListDelegate.h
     src/net/TcpTradingClient.cpp
     src/net/TcpTradingClient.h
     src/net/KlineBinary.cpp

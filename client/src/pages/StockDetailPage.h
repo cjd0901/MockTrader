@@ -14,7 +14,7 @@
 class QLabel;
 class QGraphicsTextItem;
 class QPushButton;
-class QScrollBar;
+class KlineTimelineBar;
 
 class StockDetailPage final : public QWidget
 {
@@ -55,7 +55,7 @@ private:
     void showCandleDetailAt(int barIndex, const QPoint &viewPos);
     void hideCandleDetail();
     bool eventFilter(QObject *watched, QEvent *event) override;
-    void syncScrollBarRange();
+    void syncTimelineRange();
     void scrollToLatest();
     void checkPrefetch();
     void placeLabelBesideCandle(QGraphicsTextItem *label, const QPointF &anchor, bool preferLeft);
@@ -69,7 +69,7 @@ private:
 
     QLabel *m_title = nullptr;
     QPushButton *m_back = nullptr;
-    QScrollBar *m_scrollBar = nullptr;
+    KlineTimelineBar *m_timeline = nullptr;
 
     QChart *m_chart = nullptr;
     QChartView *m_view = nullptr;
