@@ -95,8 +95,6 @@ Output example: `data/kline/5min/立讯精密_002475.bin`.
 
 File name: `{display_name}_{symbol}.bin`.
 
-> If you used an older script with `time` from `slice(-6)` only, re-run `get_5min.py` to refresh files.
-
 ## Run the server
 
 From the repository root:

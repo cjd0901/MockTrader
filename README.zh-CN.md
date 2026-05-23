@@ -95,8 +95,6 @@ python data/scripts/get_5min.py
 
 文件名：`{名称}_{代码}.bin`。
 
-> 若曾用旧版脚本（`time` 使用 `slice(-6)`），请重新执行 `get_5min.py` 覆盖数据。
-
 ## 运行服务端
 
 在项目根目录：
