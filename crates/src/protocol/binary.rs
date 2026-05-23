@@ -38,7 +38,7 @@ pub enum ServerMessage {
         total: u64,
         /// 原始 K 线字节，`len() % 32 == 0`
         records: Vec<u8>,
-        /// MACD/KDJ，每条 6×f64 LE，`len() / 48 == records.len() / 32`
+        /// MACD/KDJ，每条 6×i32 LE（值×100），`len() / 24 == records.len() / 32`
         indicators: Vec<u8>,
     },
     Error(String),
@@ -321,7 +321,7 @@ mod tests {
         for (i, chunk) in records.chunks_mut(32).enumerate() {
             chunk[0..4].copy_from_slice(&(20200102i32 + i as i32).to_le_bytes());
         }
-        let indicators = vec![0u8; 96]; // 2 bars × 48 bytes
+        let indicators = vec![0u8; 48]; // 2 bars × 24 bytes
         let frame = encode_response(&ServerMessage::CandleChunk {
             start_index: 10,
             total: 1000,
@@ -338,7 +338,7 @@ mod tests {
                 assert_eq!(start_index, 10);
                 assert_eq!(total, 1000);
                 assert_eq!(records.len(), 64);
-                assert_eq!(indicators.len(), 96);
+                assert_eq!(indicators.len(), 48);
             }
             _ => panic!("wrong variant"),
         }

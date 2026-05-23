@@ -33,7 +33,7 @@ The stack is a **Rust TCP server** (data + indicators + future simulation engine
 |------|--------|
 | 5-minute K-line storage & TCP API | **Available** |
 | Candlestick chart, timeline scroll, prefetch | **Available** |
-| MACD / KDJ (server-side, 48-byte indicator payload) | **Available** |
+| MACD / KDJ (server-side, 24-byte indicator payload, i32×100) | **Available** |
 | Strategy engine, order simulator, TWAP/split logic | **Planned** |
 | Buy/sell markers & PnL panel on chart | **Planned** |
 
@@ -147,7 +147,7 @@ Frame: `[u8 type][u32 LE payload length][payload]`
 | `CandleChunk` | 102 | S→C | `start_index`, `total`, raw K-line bytes, indicator bytes |
 | `Error` | 255 | S→C | Error text |
 
-Each bar: **32-byte candle** + **48-byte indicators** (6× `f64` LE: `macd_dif`, `macd_dea`, `macd_bar`, `kdj_k`, `kdj_d`, `kdj_j`).
+Each bar: **32-byte candle** + **24-byte indicators** (6× `i32` LE, value = round(indicator×100); `i32::MIN` = invalid: `macd_dif`, `macd_dea`, `macd_bar`, `kdj_k`, `kdj_d`, `kdj_j`).
 
 `GetCandles` without `before_index` returns the latest `limit` records at the end of the file.
 

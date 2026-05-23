@@ -41,7 +41,10 @@ struct IndicatorBar
 namespace KlineBinary {
 
 constexpr int RecordSize = 32;
-constexpr int IndicatorValuesSize = 48;
+constexpr int IndicatorValuesSize = 24;
+/// Sentinel on wire when an indicator is not available (`i32::MIN`).
+constexpr qint32 IndicatorInvalid = static_cast<qint32>(0x80000000);
+constexpr int IndicatorScale = 100;
 
 constexpr quint8 MsgReqListStocks = 1;
 constexpr quint8 MsgReqGetCandles = 2;

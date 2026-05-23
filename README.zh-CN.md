@@ -33,7 +33,7 @@ MockTrader 是一款**本地优先**的量化历史回测软件，面向 A 股�
 |------|------|
 | 5 分钟 K 线存储与 TCP 接口 | **已实现** |
 | 蜡烛图、时间轴拖动、向左预加载 | **已实现** |
-| MACD / KDJ（服务端计算，48 字节指标包） | **已实现** |
+| MACD / KDJ（服务端计算，24 字节指标包，i32×100） | **已实现** |
 | 策略引擎、下单仿真、拆单逻辑 | **规划中** |
 | K 线买卖点标记与收益面板 | **规划中** |
 
@@ -147,7 +147,7 @@ cmake --build build -j
 | CandleChunk | 102 | S→C | `start_index`、`total`、原始 K 线、指标字节 |
 | Error | 255 | S→C | 错误文本 |
 
-每根 K 线：**32 字节行情** + **48 字节指标**（6×f64 LE：`macd_dif`、`macd_dea`、`macd_bar`、`kdj_k`、`kdj_d`、`kdj_j`）。
+每根 K 线：**32 字节行情** + **24 字节指标**（6×i32 LE，值为 round(指标×100)；`i32::MIN` 表示无效：`macd_dif`、`macd_dea`、`macd_bar`、`kdj_k`、`kdj_d`、`kdj_j`）。
 
 `GetCandles` 未带 `before_index` 时返回文件末尾（最新）的 `limit` 条记录。
 

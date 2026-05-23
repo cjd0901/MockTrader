@@ -136,31 +136,23 @@ QVector<IndicatorBar> decodeIndicators(const QByteArray &indicators, int barCoun
     QVector<IndicatorBar> out;
     out.reserve(barCount);
 
-    auto readF64 = [&](int off) -> double {
-        quint64 bits = 0;
-        for (int i = 0; i < 8; ++i) {
-            bits |= quint64(static_cast<quint8>(indicators[off + i])) << (8 * i);
+    auto readStored = [&](int off) -> std::pair<double, bool> {
+        const qint32 raw = readI32(indicators.constData() + off);
+        if (raw == IndicatorInvalid) {
+            return {0.0, false};
         }
-        double v = 0.0;
-        std::memcpy(&v, &bits, 8);
-        return v;
+        return {raw / static_cast<double>(IndicatorScale), true};
     };
 
     for (int i = 0; i < barCount; ++i) {
         const int base = i * IndicatorValuesSize;
         IndicatorBar b;
-        b.macdDif = readF64(base);
-        b.macdDea = readF64(base + 8);
-        b.macdBar = readF64(base + 16);
-        b.kdjK = readF64(base + 24);
-        b.kdjD = readF64(base + 32);
-        b.kdjJ = readF64(base + 40);
-        b.macdDifValid = std::isfinite(b.macdDif);
-        b.macdDeaValid = std::isfinite(b.macdDea);
-        b.macdBarValid = std::isfinite(b.macdBar);
-        b.kdjKValid = std::isfinite(b.kdjK);
-        b.kdjDValid = std::isfinite(b.kdjD);
-        b.kdjJValid = std::isfinite(b.kdjJ);
+        std::tie(b.macdDif, b.macdDifValid) = readStored(base);
+        std::tie(b.macdDea, b.macdDeaValid) = readStored(base + 4);
+        std::tie(b.macdBar, b.macdBarValid) = readStored(base + 8);
+        std::tie(b.kdjK, b.kdjKValid) = readStored(base + 12);
+        std::tie(b.kdjD, b.kdjDValid) = readStored(base + 16);
+        std::tie(b.kdjJ, b.kdjJValid) = readStored(base + 20);
         out.push_back(b);
     }
     return out;

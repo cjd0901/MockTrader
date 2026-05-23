@@ -127,12 +127,12 @@ fn parse_stock_from_filename(name: Option<&str>) -> Option<StockEntry> {
 }
 
 struct IndicatorSeriesSlice<'a> {
-    macd_dif: &'a [f64],
-    macd_dea: &'a [f64],
-    macd_bar: &'a [f64],
-    kdj_k: &'a [f64],
-    kdj_d: &'a [f64],
-    kdj_j: &'a [f64],
+    macd_dif: &'a [i32],
+    macd_dea: &'a [i32],
+    macd_bar: &'a [i32],
+    kdj_k: &'a [i32],
+    kdj_d: &'a [i32],
+    kdj_j: &'a [i32],
 }
 
 fn encode_values_slice(s: &IndicatorSeriesSlice<'_>) -> Vec<u8> {
@@ -146,6 +146,7 @@ fn encode_values_slice(s: &IndicatorSeriesSlice<'_>) -> Vec<u8> {
         out.extend_from_slice(&s.kdj_d[i].to_le_bytes());
         out.extend_from_slice(&s.kdj_j[i].to_le_bytes());
     }
+    debug_assert_eq!(out.len(), n * indicators::INDICATOR_VALUES_SIZE);
     out
 }
 
