@@ -22,7 +22,77 @@
 
 namespace {
 constexpr double kPriceEps = 0.0005;
+constexpr double kMinFlatBodyHalfPrice = 0.0005;
+/// 收平实体屏幕高度（像素）：细线，避免在普通 K 线中像实心柱
+constexpr double kMinFlatBodyPixels = 2.0;
+/// 有影线时实体最多占整根 K 线高度比例
+constexpr double kMaxFlatBodyRangeRatio = 0.1;
 constexpr QMargins kChartMargins{4, 4, 4, 0};
+
+struct DisplayOhlc
+{
+    double open = 0.0;
+    double high = 0.0;
+    double low = 0.0;
+    double close = 0.0;
+};
+
+double flatBodyHeightForBar(const CandleBar &b, double flatBodyHalf)
+{
+    double height = flatBodyHalf * 2.0;
+    const double range = b.high - b.low;
+    if (range > kPriceEps) {
+        height = qMin(height, range * kMaxFlatBodyRangeRatio);
+    }
+    return qMax(height, kPriceEps * 4);
+}
+
+DisplayOhlc ohlcForDisplay(const CandleBar &b, double flatBodyHalf)
+{
+    DisplayOhlc d{b.open, b.high, b.low, b.close};
+    if (qAbs(d.close - d.open) > kPriceEps) {
+        return d;
+    }
+
+    const double px = (d.open + d.close) * 0.5;
+    const double bodyHeight = flatBodyHeightForBar(b, flatBodyHalf);
+    const double half = bodyHeight * 0.5;
+
+    const bool flatAtLow = b.low >= px - kPriceEps && qAbs(b.open - b.low) <= kPriceEps
+        && qAbs(b.close - b.low) <= kPriceEps;
+    const bool flatAtHigh = b.high <= px + kPriceEps && qAbs(b.open - b.high) <= kPriceEps
+        && qAbs(b.close - b.high) <= kPriceEps;
+
+    if (flatAtLow && !flatAtHigh) {
+        d.low = b.low;
+        d.open = b.low;
+        d.close = b.low + bodyHeight;
+        d.high = qMax(b.high, d.close);
+        return d;
+    }
+
+    if (flatAtHigh && !flatAtLow) {
+        d.high = b.high;
+        d.close = b.high;
+        d.open = b.high - bodyHeight;
+        d.low = qMin(b.low, d.open);
+        return d;
+    }
+
+    const double bodyBottom = px - half;
+    const double bodyTop = px + half;
+    d.open = bodyBottom;
+    d.close = bodyTop;
+
+    if (b.high <= bodyTop + kPriceEps && b.low >= bodyBottom - kPriceEps) {
+        d.high = bodyTop;
+        d.low = bodyBottom;
+    } else {
+        d.high = qMax(b.high, bodyTop);
+        d.low = qMin(b.low, bodyBottom);
+    }
+    return d;
+}
 
 const QColor kEastMoneyUp{0xF0, 0x3E, 0x3E};
 const QColor kEastMoneyDown{0x1B, 0xAA, 0x3A};
@@ -331,10 +401,24 @@ void StockDetailPage::mergeCandles(const QString &symbol, quint64 startIndex, qu
     renderVisibleWindow();
 }
 
+void StockDetailPage::updateFlatBodyHalfForAxis(double axisMin, double axisMax)
+{
+    const double span = axisMax - axisMin;
+    if (!(span > 0.0) || !std::isfinite(span)) {
+        m_flatBodyHalf = kMinFlatBodyHalfPrice;
+        return;
+    }
+
+    const double plotHeight = qMax(80.0, m_view->height() * 0.72);
+
+    const double pricePerPixel = span / plotHeight;
+    m_flatBodyHalf = qMax(kMinFlatBodyHalfPrice, pricePerPixel * kMinFlatBodyPixels * 0.5);
+}
+
 void StockDetailPage::appendCandle(const CandleBar &b, int localIndex)
 {
-    auto *set = new QCandlestickSet(b.open, b.high, b.low, b.close,
-                                    static_cast<qreal>(localIndex));
+    const DisplayOhlc d = ohlcForDisplay(b, m_flatBodyHalf);
+    auto *set = new QCandlestickSet(d.open, d.high, d.low, d.close, static_cast<qreal>(localIndex));
     if (b.close >= b.open - kPriceEps) {
         m_seriesUp->append(set);
     } else {
@@ -583,11 +667,24 @@ void StockDetailPage::renderVisibleWindow()
 
     for (int i = start; i < end; ++i) {
         const CandleBar &b = m_candles[i];
-        const int localIdx = i - start;
-        appendCandle(b, localIdx);
-
         minY = qMin(minY, b.low);
         maxY = qMax(maxY, b.high);
+    }
+
+    double axisMin = minY;
+    double axisMax = maxY;
+    if (std::isfinite(minY) && std::isfinite(maxY) && minY < maxY) {
+        const double pad = (maxY - minY) * 0.05;
+        axisMin = minY - pad;
+        axisMax = maxY + pad;
+        m_axisY->setRange(axisMin, axisMax);
+    }
+    updateFlatBodyHalfForAxis(axisMin, axisMax);
+
+    for (int i = start; i < end; ++i) {
+        const CandleBar &b = m_candles[i];
+        const int localIdx = i - start;
+        appendCandle(b, localIdx);
 
         if (b.high >= rangeHigh) {
             rangeHigh = b.high;
@@ -602,11 +699,6 @@ void StockDetailPage::renderVisibleWindow()
     }
 
     syncSubChartXRange(count);
-
-    if (std::isfinite(minY) && std::isfinite(maxY) && minY < maxY) {
-        const double pad = (maxY - minY) * 0.05;
-        m_axisY->setRange(minY - pad, maxY + pad);
-    }
 
     renderMacdChart(start, end);
     renderKdjChart(start, end);

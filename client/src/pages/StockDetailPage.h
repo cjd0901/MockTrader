@@ -60,6 +60,7 @@ private:
     void checkPrefetch();
     void placeLabelBesideCandle(QGraphicsTextItem *label, const QPointF &anchor, bool preferLeft);
     void appendCandle(const CandleBar &b, int localIndex);
+    void updateFlatBodyHalfForAxis(double axisMin, double axisMax);
     static void setupSubChart(SubChart &panel, const QString &title);
     static void fitAxisY(QValueAxis *axis, const QVector<double> &samples);
 
@@ -105,4 +106,7 @@ private:
     int m_extremaLocalLowIdx = -1;
     double m_extremaHigh = 0.0;
     double m_extremaLow = 0.0;
+
+    /// 收平 K 线绘制用实体半高（价），同屏统一，由像素最小高度换算
+    double m_flatBodyHalf = 0.001;
 };
