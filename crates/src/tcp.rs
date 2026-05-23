@@ -63,10 +63,11 @@ async fn handle_connection(mut stream: TcpStream, state: AppState) -> anyhow::Re
                 .read_candles_raw(&symbol, before_index, limit)
                 .await
             {
-                Ok((start_index, total, records)) => ServerMessage::CandleChunk {
+                Ok((start_index, total, records, indicators)) => ServerMessage::CandleChunk {
                     start_index,
                     total,
                     records,
+                    indicators,
                 },
                 Err(e) => ServerMessage::Error(format!("read candles failed: {e:#}")),
             },

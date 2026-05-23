@@ -22,9 +22,24 @@ struct StockRow
     QString displayName;
 };
 
+struct IndicatorBar
+{
+    double macdDif = 0.0;
+    double macdDea = 0.0;
+    double kdjK = 0.0;
+    double kdjD = 0.0;
+    double kdjJ = 0.0;
+    bool macdDifValid = false;
+    bool macdDeaValid = false;
+    bool kdjKValid = false;
+    bool kdjDValid = false;
+    bool kdjJValid = false;
+};
+
 namespace KlineBinary {
 
 constexpr int RecordSize = 32;
+constexpr int IndicatorValuesSize = 40;
 
 constexpr quint8 MsgReqListStocks = 1;
 constexpr quint8 MsgReqGetCandles = 2;
@@ -37,5 +52,6 @@ QByteArray encodeGetCandlesRequest(const QString &symbol, std::optional<quint64>
                                    quint32 limit);
 
 QVector<CandleBar> decodeRecords(const QByteArray &records);
+QVector<IndicatorBar> decodeIndicators(const QByteArray &indicators, int barCount);
 
 } // namespace KlineBinary

@@ -1,4 +1,5 @@
 mod config;
+mod indicators;
 mod kline;
 mod protocol;
 mod tcp;

@@ -162,11 +162,15 @@ void TcpTradingClient::handleFrame(const QByteArray &frame)
             | (quint64(static_cast<uchar>(payload[14])) << 48)
             | (quint64(static_cast<uchar>(payload[15])) << 56);
 
-        const QByteArray records = payload.mid(16);
-        if (records.size() % KlineBinary::RecordSize != 0) {
-            emit connectionError(tr("K线字节数不是 32 的整数倍"));
+        const QByteArray body = payload.mid(16);
+        const int barBytes = KlineBinary::RecordSize + KlineBinary::IndicatorValuesSize;
+        if (!body.isEmpty() && body.size() % barBytes != 0) {
+            emit connectionError(tr("K线/指标数据长度无效"));
             return;
         }
+        const int barCount = body.size() / barBytes;
+        const QByteArray records = body.left(barCount * KlineBinary::RecordSize);
+        const QByteArray indicatorBytes = body.mid(barCount * KlineBinary::RecordSize);
 
         const QVector<CandleBar> candles = KlineBinary::decodeRecords(records);
         if (candles.isEmpty() && !records.isEmpty()) {
@@ -174,7 +178,14 @@ void TcpTradingClient::handleFrame(const QByteArray &frame)
             return;
         }
 
-        emit candlesReceived(m_pendingCandleSymbol, startIndex, total, candles);
+        const QVector<IndicatorBar> indicators =
+            KlineBinary::decodeIndicators(indicatorBytes, barCount);
+        if (indicators.size() != candles.size()) {
+            emit connectionError(tr("指标解码失败"));
+            return;
+        }
+
+        emit candlesReceived(m_pendingCandleSymbol, startIndex, total, candles, indicators);
         return;
     }
 

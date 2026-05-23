@@ -4,12 +4,16 @@
 
 #include <QtCharts/QCandlestickSet>
 
+#include <QDateTime>
+#include <QEvent>
 #include <QFont>
 #include <QGraphicsTextItem>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QTimeZone>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -18,19 +22,22 @@
 
 namespace {
 constexpr double kPriceEps = 0.0005;
+constexpr QMargins kChartMargins{4, 4, 4, 0};
 
 const QColor kEastMoneyUp{0xF0, 0x3E, 0x3E};
 const QColor kEastMoneyDown{0x1B, 0xAA, 0x3A};
 const QColor kLabelHighColor{0xF0, 0x3E, 0x3E};
 const QColor kLabelLowColor{0x1B, 0xAA, 0x3A};
+const QColor kSubChartTitleColor{0x66, 0x66, 0x66};
 
-QGraphicsTextItem *makeExtremaLabel(const QString &text, const QColor &color, QChart *chart)
+QGraphicsTextItem *makeChartLabel(const QString &text, const QColor &color, QChart *chart,
+                                bool bold = false, int pointSize = 9)
 {
     auto *item = new QGraphicsTextItem(text, chart);
     item->setZValue(100);
     QFont font = item->font();
-    font.setPointSize(9);
-    font.setBold(true);
+    font.setPointSize(pointSize);
+    font.setBold(bold);
     item->setFont(font);
     item->setDefaultTextColor(color);
     return item;
@@ -44,10 +51,91 @@ void styleCandleSeries(QCandlestickSeries *series, const QColor &color)
     series->setBrush(QBrush(color));
     series->setBodyOutlineVisible(false);
     series->setBodyWidth(0.72);
-    // 关闭 cap（最高/最低价处的横线），影线才是竖直线，否则顶端会像左右凸起
     series->setCapsVisible(false);
 }
+
+void styleLineSeries(QLineSeries *series, const QColor &color, int width = 1)
+{
+    QPen pen(color, width);
+    series->setPen(pen);
+    series->setBrush(Qt::NoBrush);
+}
+
+void hideAxisY(QValueAxis *axis)
+{
+    axis->setTitleVisible(false);
+    axis->setLabelsVisible(false);
+    axis->setLineVisible(false);
+    axis->setGridLineVisible(false);
+}
+
+QString formatIndicatorValue(double value, bool valid, int decimals)
+{
+    if (!valid || !std::isfinite(value)) {
+        return QStringLiteral("--");
+    }
+    return QString::number(value, 'f', decimals);
+}
+
+QString formatMacdReadout(const IndicatorBar &ind)
+{
+    return QStringLiteral("DIF:%1  DEA:%2")
+        .arg(formatIndicatorValue(ind.macdDif, ind.macdDifValid, 3),
+             formatIndicatorValue(ind.macdDea, ind.macdDeaValid, 3));
+}
+
+QString formatKdjReadout(const IndicatorBar &ind)
+{
+    return QStringLiteral("K:%1  D:%2  J:%3")
+        .arg(formatIndicatorValue(ind.kdjK, ind.kdjKValid, 2),
+             formatIndicatorValue(ind.kdjD, ind.kdjDValid, 2),
+             formatIndicatorValue(ind.kdjJ, ind.kdjJValid, 2));
+}
+
+QString formatCandleDetail(const CandleBar &bar)
+{
+    const QTimeZone tz(QByteArrayLiteral("Asia/Shanghai"));
+    const QDateTime dt = QDateTime::fromSecsSinceEpoch(bar.tsSec, tz);
+    const QString timeLine =
+        dt.isValid() ? dt.toString(QStringLiteral("yyyy-MM-dd HH:mm")) : QStringLiteral("--");
+
+    return QStringLiteral("%1\n开 %2  高 %3\n低 %4  收 %5\n量 %6")
+        .arg(timeLine)
+        .arg(bar.open, 0, 'f', 2)
+        .arg(bar.high, 0, 'f', 2)
+        .arg(bar.low, 0, 'f', 2)
+        .arg(bar.close, 0, 'f', 2)
+        .arg(static_cast<qint64>(bar.volume));
+}
 } // namespace
+
+void StockDetailPage::setupSubChart(SubChart &panel, const QString &title)
+{
+    panel.chart = new QChart();
+    panel.chart->legend()->hide();
+    panel.chart->setAnimationOptions(QChart::NoAnimation);
+    panel.chart->setMargins(kChartMargins);
+    panel.chart->setBackgroundBrush(QBrush(QColor(0xFF, 0xFF, 0xFF)));
+    panel.chart->setPlotAreaBackgroundBrush(QBrush(QColor(0xFF, 0xFF, 0xFF)));
+
+    panel.title = makeChartLabel(title, kSubChartTitleColor, panel.chart, false, 10);
+    panel.values = makeChartLabel(QString(), kSubChartTitleColor, panel.chart, false, 9);
+
+    panel.axisX = new QValueAxis();
+    panel.axisX->setLabelsVisible(false);
+    panel.axisX->setTitleVisible(false);
+    panel.axisX->setGridLineVisible(false);
+
+    panel.axisY = new QValueAxis();
+    hideAxisY(panel.axisY);
+
+    panel.chart->addAxis(panel.axisX, Qt::AlignBottom);
+    panel.chart->addAxis(panel.axisY, Qt::AlignLeft);
+
+    panel.view = new QChartView(panel.chart);
+    panel.view->setRenderHint(QPainter::Antialiasing, false);
+    panel.view->setDragMode(QGraphicsView::NoDrag);
+}
 
 StockDetailPage::StockDetailPage(QWidget *parent)
     : QWidget(parent)
@@ -60,11 +148,16 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     , m_axisY(new QValueAxis())
     , m_seriesUp(new QCandlestickSeries())
     , m_seriesDown(new QCandlestickSeries())
+    , m_macdDif(new QLineSeries())
+    , m_macdDea(new QLineSeries())
+    , m_kdjK(new QLineSeries())
+    , m_kdjD(new QLineSeries())
+    , m_kdjJ(new QLineSeries())
     , m_visibleBarCount(KlineLoadConfig::VisibleBarCount)
 {
     m_chart->legend()->hide();
     m_chart->setAnimationOptions(QChart::NoAnimation);
-    m_chart->setMargins(QMargins(8, 8, 8, 4));
+    m_chart->setMargins(kChartMargins);
     m_chart->setBackgroundBrush(QBrush(QColor(0xFF, 0xFF, 0xFF)));
     m_chart->setPlotAreaBackgroundBrush(QBrush(QColor(0xFF, 0xFF, 0xFF)));
 
@@ -79,8 +172,8 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     m_axisX->setGridLineVisible(true);
     m_axisX->setGridLineColor(QColor(0xE8, 0xE8, 0xE8));
 
-    m_axisY->setTitleText(tr("价格"));
-    m_axisY->setLabelsColor(QColor(0x66, 0x66, 0x66));
+    hideAxisY(m_axisY);
+    m_axisY->setGridLineVisible(true);
     m_axisY->setGridLineColor(QColor(0xE8, 0xE8, 0xE8));
 
     m_chart->addAxis(m_axisX, Qt::AlignBottom);
@@ -90,13 +183,40 @@ StockDetailPage::StockDetailPage(QWidget *parent)
         s->attachAxis(m_axisY);
     }
 
-    m_labelHigh = makeExtremaLabel(QString(), kLabelHighColor, m_chart);
-    m_labelLow = makeExtremaLabel(QString(), kLabelLowColor, m_chart);
+    m_labelHigh = makeChartLabel(QString(), kLabelHighColor, m_chart, true);
+    m_labelLow = makeChartLabel(QString(), kLabelLowColor, m_chart, true);
     m_labelHigh->hide();
     m_labelLow->hide();
 
+    m_candleDetail = makeChartLabel(QString(), QColor(0x33, 0x33, 0x33), m_chart, false, 9);
+    m_candleDetail->setZValue(120);
+    m_candleDetail->hide();
+
     m_view->setRenderHint(QPainter::Antialiasing, false);
     m_view->setDragMode(QGraphicsView::NoDrag);
+    m_view->viewport()->installEventFilter(this);
+
+    setupSubChart(m_macdChart, QStringLiteral("MACD"));
+    styleLineSeries(m_macdDif, QColor(0x44, 0x88, 0xFF), 1);
+    styleLineSeries(m_macdDea, QColor(0xFF, 0x88, 0x00), 1);
+    m_macdChart.chart->addSeries(m_macdDif);
+    m_macdChart.chart->addSeries(m_macdDea);
+    for (QLineSeries *s : {m_macdDif, m_macdDea}) {
+        s->attachAxis(m_macdChart.axisX);
+        s->attachAxis(m_macdChart.axisY);
+    }
+
+    setupSubChart(m_kdjChart, QStringLiteral("KDJ"));
+    styleLineSeries(m_kdjK, QColor(0xFF, 0xC1, 0x07), 1);
+    styleLineSeries(m_kdjD, QColor(0x42, 0x85, 0xF4), 1);
+    styleLineSeries(m_kdjJ, QColor(0xAB, 0x47, 0xBC), 1);
+    m_kdjChart.chart->addSeries(m_kdjK);
+    m_kdjChart.chart->addSeries(m_kdjD);
+    m_kdjChart.chart->addSeries(m_kdjJ);
+    for (QLineSeries *s : {m_kdjK, m_kdjD, m_kdjJ}) {
+        s->attachAxis(m_kdjChart.axisX);
+        s->attachAxis(m_kdjChart.axisY);
+    }
 
     m_scrollBar->setTracking(true);
 
@@ -106,9 +226,12 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     top->addWidget(new QLabel(tr("5分钟"), this), 0, Qt::AlignRight);
 
     auto *root = new QVBoxLayout(this);
+    root->setSpacing(2);
     root->addLayout(top);
     root->addWidget(m_title);
-    root->addWidget(m_view, 1);
+    root->addWidget(m_view, 4);
+    root->addWidget(m_macdChart.view, 2);
+    root->addWidget(m_kdjChart.view, 2);
     root->addWidget(m_scrollBar, 0);
 
     connect(m_back, &QPushButton::clicked, this, &StockDetailPage::backRequested);
@@ -120,6 +243,8 @@ StockDetailPage::StockDetailPage(QWidget *parent)
         checkPrefetch();
     });
     connect(m_chart, &QChart::plotAreaChanged, this, &StockDetailPage::updateExtremaLabels);
+    connect(m_macdChart.chart, &QChart::plotAreaChanged, this, &StockDetailPage::updateSubChartHeaders);
+    connect(m_kdjChart.chart, &QChart::plotAreaChanged, this, &StockDetailPage::updateSubChartHeaders);
 }
 
 void StockDetailPage::setStock(const QString &symbol, const QString &displayName)
@@ -133,6 +258,7 @@ void StockDetailPage::setStock(const QString &symbol, const QString &displayName
 void StockDetailPage::resetCandles()
 {
     m_candles.clear();
+    m_indicators.clear();
     m_oldestLoadedIndex = 0;
     m_totalCount = 0;
     m_prefetchInFlight = false;
@@ -140,8 +266,15 @@ void StockDetailPage::resetCandles()
     m_extremaLocalLowIdx = -1;
     m_seriesUp->clear();
     m_seriesDown->clear();
+    m_macdDif->clear();
+    m_macdDea->clear();
+    m_kdjK->clear();
+    m_kdjD->clear();
+    m_kdjJ->clear();
     m_labelHigh->hide();
     m_labelLow->hide();
+    hideCandleDetail();
+    m_focusBarIndex = -1;
     m_updatingScroll = true;
     m_scrollBar->setRange(0, 0);
     m_scrollBar->setValue(0);
@@ -149,9 +282,10 @@ void StockDetailPage::resetCandles()
 }
 
 void StockDetailPage::mergeCandles(const QString &symbol, quint64 startIndex, quint64 total,
-                                 const QVector<CandleBar> &candles)
+                                   const QVector<CandleBar> &candles,
+                                   const QVector<IndicatorBar> &indicators)
 {
-    if (symbol != m_symbol || candles.isEmpty()) {
+    if (symbol != m_symbol || candles.isEmpty() || indicators.size() != candles.size()) {
         return;
     }
 
@@ -163,14 +297,22 @@ void StockDetailPage::mergeCandles(const QString &symbol, quint64 startIndex, qu
 
     if (firstLoad) {
         m_candles = candles;
+        m_indicators = indicators;
         m_oldestLoadedIndex = startIndex;
     } else if (startIndex < m_oldestLoadedIndex) {
         const int added = static_cast<int>(candles.size());
-        QVector<CandleBar> merged;
-        merged.reserve(added + m_candles.size());
-        merged += candles;
-        merged += m_candles;
-        m_candles = std::move(merged);
+        QVector<CandleBar> mergedCandles;
+        mergedCandles.reserve(added + m_candles.size());
+        mergedCandles += candles;
+        mergedCandles += m_candles;
+
+        QVector<IndicatorBar> mergedIndicators;
+        mergedIndicators.reserve(added + m_indicators.size());
+        mergedIndicators += indicators;
+        mergedIndicators += m_indicators;
+
+        m_candles = std::move(mergedCandles);
+        m_indicators = std::move(mergedIndicators);
         m_oldestLoadedIndex = startIndex;
 
         syncScrollBarRange();
@@ -200,6 +342,213 @@ void StockDetailPage::appendCandle(const CandleBar &b, int localIndex)
     }
 }
 
+void StockDetailPage::fitAxisY(QValueAxis *axis, const QVector<double> &samples)
+{
+    double minV = std::numeric_limits<double>::infinity();
+    double maxV = -std::numeric_limits<double>::infinity();
+    for (double v : samples) {
+        if (!std::isfinite(v)) {
+            continue;
+        }
+        minV = qMin(minV, v);
+        maxV = qMax(maxV, v);
+    }
+    if (!std::isfinite(minV) || !std::isfinite(maxV) || minV >= maxV) {
+        axis->setRange(-1, 1);
+        return;
+    }
+    const double pad = (maxV - minV) * 0.08;
+    axis->setRange(minV - pad, maxV + pad);
+}
+
+void StockDetailPage::syncSubChartXRange(int count)
+{
+    const qreal xMax = static_cast<qreal>(count) - 0.5;
+    m_axisX->setRange(-0.5, xMax);
+    m_macdChart.axisX->setRange(-0.5, xMax);
+    m_kdjChart.axisX->setRange(-0.5, xMax);
+}
+
+void StockDetailPage::updateSubChartHeaders()
+{
+    const auto layoutRow = [](SubChart &panel) {
+        if (!panel.title || !panel.values || !panel.chart) {
+            return;
+        }
+        const QRectF plot = panel.chart->plotArea();
+        const qreal top = plot.top() + 2;
+        panel.title->setPos(plot.left() + 4, top);
+        const qreal valuesX = panel.title->pos().x() + panel.title->boundingRect().width() + 8;
+        panel.values->setPos(valuesX, top + 1);
+    };
+    layoutRow(m_macdChart);
+    layoutRow(m_kdjChart);
+}
+
+void StockDetailPage::updateIndicatorReadouts(int barIndex)
+{
+    if (barIndex < 0 || barIndex >= m_indicators.size()) {
+        if (m_macdChart.values) {
+            m_macdChart.values->setPlainText(QString());
+        }
+        if (m_kdjChart.values) {
+            m_kdjChart.values->setPlainText(QString());
+        }
+        updateSubChartHeaders();
+        return;
+    }
+
+    const IndicatorBar &ind = m_indicators[barIndex];
+    m_macdChart.values->setPlainText(formatMacdReadout(ind));
+    m_kdjChart.values->setPlainText(formatKdjReadout(ind));
+    updateSubChartHeaders();
+}
+
+int StockDetailPage::defaultBarIndex() const
+{
+    if (m_candles.isEmpty()) {
+        return -1;
+    }
+
+    const QTimeZone tz(QByteArrayLiteral("Asia/Shanghai"));
+    const QDate latestDay =
+        QDateTime::fromSecsSinceEpoch(m_candles.last().tsSec, tz).date();
+
+    for (int i = m_candles.size() - 1; i >= 0; --i) {
+        const QDate day = QDateTime::fromSecsSinceEpoch(m_candles[i].tsSec, tz).date();
+        if (day == latestDay) {
+            return i;
+        }
+        if (day < latestDay) {
+            break;
+        }
+    }
+    return m_candles.size() - 1;
+}
+
+void StockDetailPage::showCandleDetailAt(int barIndex, const QPoint &viewPos)
+{
+    if (barIndex < 0 || barIndex >= m_candles.size() || !m_candleDetail) {
+        return;
+    }
+
+    m_candleDetail->setPlainText(formatCandleDetail(m_candles[barIndex]));
+
+    const QPointF scenePos = m_view->mapToScene(viewPos);
+    QPointF chartPos = m_chart->mapFromScene(scenePos);
+    const QRectF plot = m_chart->plotArea();
+    const QRectF bounds = m_candleDetail->boundingRect();
+
+    qreal x = chartPos.x() + 10;
+    qreal y = chartPos.y() + 10;
+    x = qBound(plot.left(), x, plot.right() - bounds.width());
+    y = qBound(plot.top(), y, plot.bottom() - bounds.height());
+    m_candleDetail->setPos(x, y);
+    m_candleDetail->show();
+}
+
+void StockDetailPage::hideCandleDetail()
+{
+    if (m_candleDetail) {
+        m_candleDetail->hide();
+    }
+}
+
+bool StockDetailPage::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched != m_view->viewport()) {
+        return QWidget::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::MouseButtonPress) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::LeftButton && m_candleDetail && m_candleDetail->isVisible()) {
+            hideCandleDetail();
+            m_focusBarIndex = -1;
+            updateIndicatorReadouts(defaultBarIndex());
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::MouseButtonDblClick) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() != Qt::LeftButton || m_candles.isEmpty()) {
+            return QWidget::eventFilter(watched, event);
+        }
+
+        const QPointF scenePos = m_view->mapToScene(mouseEvent->pos());
+        const QPointF valuePos = m_chart->mapToValue(scenePos, m_seriesUp);
+        const int start = m_scrollBar->value();
+        const int end = qMin(start + m_visibleBarCount, m_candles.size());
+        const int localIdx = qBound(0, qRound(valuePos.x()), qMax(0, end - start - 1));
+        const int barIndex = start + localIdx;
+
+        m_focusBarIndex = barIndex;
+        showCandleDetailAt(barIndex, mouseEvent->pos());
+        updateIndicatorReadouts(barIndex);
+        return true;
+    }
+
+    return QWidget::eventFilter(watched, event);
+}
+
+void StockDetailPage::renderMacdChart(int start, int end)
+{
+    m_macdDif->clear();
+    m_macdDea->clear();
+
+    QVector<double> samples;
+    samples.reserve((end - start) * 2);
+
+    for (int i = start; i < end; ++i) {
+        const IndicatorBar &ind = m_indicators[i];
+        const qreal x = static_cast<qreal>(i - start);
+        if (ind.macdDifValid) {
+            m_macdDif->append(x, ind.macdDif);
+            samples.append(ind.macdDif);
+        }
+        if (ind.macdDeaValid) {
+            m_macdDea->append(x, ind.macdDea);
+            samples.append(ind.macdDea);
+        }
+    }
+
+    fitAxisY(m_macdChart.axisY, samples);
+}
+
+void StockDetailPage::renderKdjChart(int start, int end)
+{
+    m_kdjK->clear();
+    m_kdjD->clear();
+    m_kdjJ->clear();
+
+    QVector<double> samples;
+    samples.reserve((end - start) * 3);
+
+    for (int i = start; i < end; ++i) {
+        const IndicatorBar &ind = m_indicators[i];
+        const qreal x = static_cast<qreal>(i - start);
+        if (ind.kdjKValid) {
+            m_kdjK->append(x, ind.kdjK);
+            samples.append(ind.kdjK);
+        }
+        if (ind.kdjDValid) {
+            m_kdjD->append(x, ind.kdjD);
+            samples.append(ind.kdjD);
+        }
+        if (ind.kdjJValid) {
+            m_kdjJ->append(x, ind.kdjJ);
+            samples.append(ind.kdjJ);
+        }
+    }
+
+    if (samples.isEmpty()) {
+        m_kdjChart.axisY->setRange(0, 100);
+    } else {
+        fitAxisY(m_kdjChart.axisY, samples);
+    }
+}
+
 void StockDetailPage::renderVisibleWindow()
 {
     m_seriesUp->clear();
@@ -210,6 +559,11 @@ void StockDetailPage::renderVisibleWindow()
     if (m_candles.isEmpty()) {
         m_labelHigh->hide();
         m_labelLow->hide();
+        m_macdDif->clear();
+        m_macdDea->clear();
+        m_kdjK->clear();
+        m_kdjD->clear();
+        m_kdjJ->clear();
         return;
     }
 
@@ -247,13 +601,23 @@ void StockDetailPage::renderVisibleWindow()
         }
     }
 
-    m_axisX->setRange(-0.5, static_cast<qreal>(count) - 0.5);
+    syncSubChartXRange(count);
+
     if (std::isfinite(minY) && std::isfinite(maxY) && minY < maxY) {
         const double pad = (maxY - minY) * 0.05;
         m_axisY->setRange(minY - pad, maxY + pad);
     }
 
-    QTimer::singleShot(0, this, &StockDetailPage::updateExtremaLabels);
+    renderMacdChart(start, end);
+    renderKdjChart(start, end);
+
+    const int readoutIndex =
+        m_focusBarIndex >= 0 ? m_focusBarIndex : defaultBarIndex();
+
+    QTimer::singleShot(0, this, [this, readoutIndex]() {
+        updateExtremaLabels();
+        updateIndicatorReadouts(readoutIndex);
+    });
 }
 
 void StockDetailPage::placeLabelBesideCandle(QGraphicsTextItem *label, const QPointF &anchor,
@@ -337,8 +701,7 @@ void StockDetailPage::checkPrefetch()
 
     const int start = m_scrollBar->value();
     const qint64 oldestTs = m_candles.first().tsSec;
-    const qint64 newestTs = m_candles.last().tsSec;
-    const qint64 loadedSpan = qMax<qint64>(1, newestTs - oldestTs);
+    const qint64 loadedSpan = qMax<qint64>(1, m_candles.last().tsSec - oldestTs);
 
     const qint64 bufferSec = loadedSpan * KlineLoadConfig::PrefetchBufferTradingDays
         / qMax(1, KlineLoadConfig::InitialTradingDays);

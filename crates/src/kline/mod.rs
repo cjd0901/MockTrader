@@ -1,13 +1,20 @@
 //! Reads 32-byte little-endian candle records from `data/kline/5min/*.bin`.
 
+mod parse;
+
 use std::path::PathBuf;
 
 use anyhow::Context;
 use tokio::fs;
 
+use crate::indicators::{self, compute_from_ohlc};
 use crate::protocol::{StockEntry, KLINE_RECORD_SIZE};
 
+pub use parse::ohlc_from_records;
+
 const RECORD_SIZE: u64 = KLINE_RECORD_SIZE as u64;
+/// Extra bars before the requested window for MACD/KDJ warmup.
+const INDICATOR_WARMUP_BARS: u64 = 150;
 
 #[derive(Clone)]
 pub struct KlineStore {
@@ -39,35 +46,53 @@ impl KlineStore {
         Ok(out)
     }
 
-    /// Returns `(start_index, total_bars, raw_record_bytes)`.
+    /// Returns `(start_index, total_bars, raw_record_bytes, indicator_bytes)`.
     pub async fn read_candles_raw(
         &self,
         symbol: &str,
         before_index: Option<u64>,
         limit: u32,
-    ) -> anyhow::Result<(u64, u64, Vec<u8>)> {
+    ) -> anyhow::Result<(u64, u64, Vec<u8>, Vec<u8>)> {
         let path = self.resolve_path(symbol)?;
         let meta = fs::metadata(&path).await?;
         let total = meta.len() / RECORD_SIZE;
         if total == 0 {
-            return Ok((0, 0, Vec::new()));
+            return Ok((0, 0, Vec::new(), Vec::new()));
         }
 
         let limit = limit.min(20_000) as u64;
         let end = before_index.unwrap_or(total).min(total);
         let start = end.saturating_sub(limit);
-        let count = end - start;
+        let warmup_start = start.saturating_sub(INDICATOR_WARMUP_BARS);
+        let warmup_count = end - warmup_start;
 
         let mut file = fs::File::open(&path).await?;
         use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-        file.seek(std::io::SeekFrom::Start(start * RECORD_SIZE))
+        file.seek(std::io::SeekFrom::Start(warmup_start * RECORD_SIZE))
             .await?;
 
-        let mut buf = vec![0u8; (count * RECORD_SIZE) as usize];
-        file.read_exact(&mut buf).await?;
+        let mut warmup_buf = vec![0u8; (warmup_count * RECORD_SIZE) as usize];
+        file.read_exact(&mut warmup_buf).await?;
 
-        Ok((start, total, buf))
+        let slice_off = ((start - warmup_start) * RECORD_SIZE) as usize;
+        let records = warmup_buf[slice_off..].to_vec();
+
+        let (closes, highs, lows) = ohlc_from_records(&warmup_buf);
+        let series = compute_from_ohlc(&closes, &highs, &lows);
+        let offset = (start - warmup_start) as usize;
+        let window = IndicatorSeriesSlice {
+            macd_dif: &series.macd_dif[offset..],
+            macd_dea: &series.macd_dea[offset..],
+            kdj_k: &series.kdj_k[offset..],
+            kdj_d: &series.kdj_d[offset..],
+            kdj_j: &series.kdj_j[offset..],
+        };
+        let indicators = encode_values_slice(&window);
+
+        debug_assert_eq!(records.len() / KLINE_RECORD_SIZE, indicators.len() / indicators::INDICATOR_VALUES_SIZE);
+
+        Ok((start, total, records, indicators))
     }
 
     fn resolve_path(&self, symbol: &str) -> anyhow::Result<PathBuf> {
@@ -100,6 +125,27 @@ fn parse_stock_from_filename(name: Option<&str>) -> Option<StockEntry> {
         symbol: symbol.to_string(),
         display_name: display_name.to_string(),
     })
+}
+
+struct IndicatorSeriesSlice<'a> {
+    macd_dif: &'a [f64],
+    macd_dea: &'a [f64],
+    kdj_k: &'a [f64],
+    kdj_d: &'a [f64],
+    kdj_j: &'a [f64],
+}
+
+fn encode_values_slice(s: &IndicatorSeriesSlice<'_>) -> Vec<u8> {
+    let n = s.macd_dif.len();
+    let mut out = Vec::with_capacity(n * indicators::INDICATOR_VALUES_SIZE);
+    for i in 0..n {
+        out.extend_from_slice(&s.macd_dif[i].to_le_bytes());
+        out.extend_from_slice(&s.macd_dea[i].to_le_bytes());
+        out.extend_from_slice(&s.kdj_k[i].to_le_bytes());
+        out.extend_from_slice(&s.kdj_d[i].to_le_bytes());
+        out.extend_from_slice(&s.kdj_j[i].to_le_bytes());
+    }
+    out
 }
 
 fn parse_name_symbol(stem: &str) -> Option<(&str, &str)> {

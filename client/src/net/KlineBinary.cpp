@@ -6,6 +6,7 @@
 #include <QTimeZone>
 #include <QtEndian>
 
+#include <cmath>
 #include <cstring>
 #include <optional>
 
@@ -122,6 +123,44 @@ QVector<CandleBar> decodeRecords(const QByteArray &records)
         out.push_back(b);
     }
 
+    return out;
+}
+
+QVector<IndicatorBar> decodeIndicators(const QByteArray &indicators, int barCount)
+{
+    const int expected = barCount * IndicatorValuesSize;
+    if (barCount <= 0 || indicators.size() != expected) {
+        return {};
+    }
+
+    QVector<IndicatorBar> out;
+    out.reserve(barCount);
+
+    auto readF64 = [&](int off) -> double {
+        quint64 bits = 0;
+        for (int i = 0; i < 8; ++i) {
+            bits |= quint64(static_cast<quint8>(indicators[off + i])) << (8 * i);
+        }
+        double v = 0.0;
+        std::memcpy(&v, &bits, 8);
+        return v;
+    };
+
+    for (int i = 0; i < barCount; ++i) {
+        const int base = i * IndicatorValuesSize;
+        IndicatorBar b;
+        b.macdDif = readF64(base);
+        b.macdDea = readF64(base + 8);
+        b.kdjK = readF64(base + 16);
+        b.kdjD = readF64(base + 24);
+        b.kdjJ = readF64(base + 32);
+        b.macdDifValid = std::isfinite(b.macdDif);
+        b.macdDeaValid = std::isfinite(b.macdDea);
+        b.kdjKValid = std::isfinite(b.kdjK);
+        b.kdjDValid = std::isfinite(b.kdjD);
+        b.kdjJValid = std::isfinite(b.kdjJ);
+        out.push_back(b);
+    }
     return out;
 }
 

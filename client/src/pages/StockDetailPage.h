@@ -5,6 +5,7 @@
 #include <QtCharts/QCandlestickSeries>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
 
 #include <QVector>
@@ -27,20 +28,40 @@ public:
 
 public slots:
     void mergeCandles(const QString &symbol, quint64 startIndex, quint64 total,
-                      const QVector<CandleBar> &candles);
+                      const QVector<CandleBar> &candles, const QVector<IndicatorBar> &indicators);
 
 signals:
     void backRequested();
     void needOlderCandles(const QString &symbol, quint64 beforeIndex);
 
 private:
+    struct SubChart {
+        QGraphicsTextItem *title = nullptr;
+        QGraphicsTextItem *values = nullptr;
+        QChart *chart = nullptr;
+        QChartView *view = nullptr;
+        QValueAxis *axisX = nullptr;
+        QValueAxis *axisY = nullptr;
+    };
+
     void renderVisibleWindow();
+    void renderMacdChart(int start, int end);
+    void renderKdjChart(int start, int end);
+    void syncSubChartXRange(int count);
     void updateExtremaLabels();
+    void updateSubChartHeaders();
+    void updateIndicatorReadouts(int barIndex);
+    int defaultBarIndex() const;
+    void showCandleDetailAt(int barIndex, const QPoint &viewPos);
+    void hideCandleDetail();
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void syncScrollBarRange();
     void scrollToLatest();
     void checkPrefetch();
     void placeLabelBesideCandle(QGraphicsTextItem *label, const QPointF &anchor, bool preferLeft);
     void appendCandle(const CandleBar &b, int localIndex);
+    static void setupSubChart(SubChart &panel, const QString &title);
+    static void fitAxisY(QValueAxis *axis, const QVector<double> &samples);
 
     QString m_symbol;
     QString m_displayName;
@@ -56,10 +77,23 @@ private:
     QCandlestickSeries *m_seriesUp = nullptr;
     QCandlestickSeries *m_seriesDown = nullptr;
 
+    SubChart m_macdChart;
+    QLineSeries *m_macdDif = nullptr;
+    QLineSeries *m_macdDea = nullptr;
+
+    SubChart m_kdjChart;
+    QLineSeries *m_kdjK = nullptr;
+    QLineSeries *m_kdjD = nullptr;
+    QLineSeries *m_kdjJ = nullptr;
+
     QGraphicsTextItem *m_labelHigh = nullptr;
     QGraphicsTextItem *m_labelLow = nullptr;
+    QGraphicsTextItem *m_candleDetail = nullptr;
+
+    int m_focusBarIndex = -1;
 
     QVector<CandleBar> m_candles;
+    QVector<IndicatorBar> m_indicators;
     quint64 m_oldestLoadedIndex = 0;
     quint64 m_totalCount = 0;
     bool m_prefetchInFlight = false;

@@ -26,7 +26,8 @@ signals:
     void connectionError(const QString &message);
     void stockListReceived(const QVector<StockRow> &stocks);
     void candlesReceived(const QString &symbol, quint64 startIndex, quint64 total,
-                         const QVector<CandleBar> &candles);
+                         const QVector<CandleBar> &candles,
+                         const QVector<IndicatorBar> &indicators);
 
 private:
     void sendFrame(const QByteArray &frame);

@@ -40,6 +40,8 @@ pub enum ServerMessage {
         total: u64,
         /// 原始 K 线字节，`len() % 32 == 0`
         records: Vec<u8>,
+        /// MACD/KDJ，每条 5×f64 LE，`len() / 40 == records.len() / 32`
+        indicators: Vec<u8>,
     },
     Error(String),
 }
@@ -152,12 +154,16 @@ pub fn encode_response(msg: &ServerMessage) -> Vec<u8> {
             start_index,
             total,
             records,
+            indicators,
         } => {
             debug_assert!(records.len() % KLINE_RECORD_SIZE == 0);
-            let mut payload = Vec::with_capacity(16 + records.len());
+            let bar_count = records.len() / KLINE_RECORD_SIZE;
+            debug_assert_eq!(indicators.len(), bar_count * crate::indicators::INDICATOR_VALUES_SIZE);
+            let mut payload = Vec::with_capacity(16 + records.len() + indicators.len());
             payload.extend_from_slice(&start_index.to_le_bytes());
             payload.extend_from_slice(&total.to_le_bytes());
             payload.extend_from_slice(records);
+            payload.extend_from_slice(indicators);
             encode_frame(MSG_RSP_CANDLE_CHUNK, &payload)
         }
         ServerMessage::Error(message) => {
@@ -263,18 +269,24 @@ fn decode_candle_chunk(payload: &[u8]) -> anyhow::Result<ServerMessage> {
     }
     let start_index = u64::from_le_bytes(payload[0..8].try_into()?);
     let total = u64::from_le_bytes(payload[8..16].try_into()?);
-    let records = payload[16..].to_vec();
-    if !records.len().is_multiple_of(KLINE_RECORD_SIZE) {
+    let body = &payload[16..];
+    const BAR_BYTES: usize = KLINE_RECORD_SIZE + crate::indicators::INDICATOR_VALUES_SIZE;
+    if !body.is_empty() && !body.len().is_multiple_of(BAR_BYTES) {
         bail!(
-            "candle records size {} not multiple of {}",
-            records.len(),
-            KLINE_RECORD_SIZE
+            "candle chunk body size {} not multiple of {}",
+            body.len(),
+            BAR_BYTES
         );
     }
+    let bar_count = body.len() / BAR_BYTES;
+    let records_len = bar_count * KLINE_RECORD_SIZE;
+    let records = body[..records_len].to_vec();
+    let indicators = body[records_len..].to_vec();
     Ok(ServerMessage::CandleChunk {
         start_index,
         total,
         records,
+        indicators,
     })
 }
 
@@ -311,20 +323,24 @@ mod tests {
         for (i, chunk) in records.chunks_mut(32).enumerate() {
             chunk[0..4].copy_from_slice(&(20200102i32 + i as i32).to_le_bytes());
         }
+        let indicators = vec![0u8; 80]; // 2 bars × 40 bytes
         let frame = encode_response(&ServerMessage::CandleChunk {
             start_index: 10,
             total: 1000,
             records,
+            indicators,
         });
         match decode_response(&frame).unwrap() {
             ServerMessage::CandleChunk {
                 start_index,
                 total,
                 records,
+                indicators,
             } => {
                 assert_eq!(start_index, 10);
                 assert_eq!(total, 1000);
                 assert_eq!(records.len(), 64);
+                assert_eq!(indicators.len(), 80);
             }
             _ => panic!("wrong variant"),
         }
