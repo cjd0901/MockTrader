@@ -44,8 +44,8 @@ void styleCandleSeries(QCandlestickSeries *series, const QColor &color)
     series->setBrush(QBrush(color));
     series->setBodyOutlineVisible(false);
     series->setBodyWidth(0.72);
-    series->setCapsVisible(true);
-    series->setCapsWidth(0.12);
+    // 关闭 cap（最高/最低价处的横线），影线才是竖直线，否则顶端会像左右凸起
+    series->setCapsVisible(false);
 }
 } // namespace
 
