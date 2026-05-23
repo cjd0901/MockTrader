@@ -43,7 +43,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_stack->setStyleSheet(QStringLiteral("background-color:#FFFFFF;"));
 
     setStyleSheet(QStringLiteral("QMainWindow{background-color:#FFFFFF;}"));
-    setWindowTitle(tr("量化行情 - MockTrader"));
+    setWindowTitle(tr("MockTrader"));
 
     wireConnections();
 
