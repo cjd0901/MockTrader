@@ -353,7 +353,7 @@ void BacktestPanel::setBacktestResult(const BacktestSummary &summary, int buyCou
         ? QStringLiteral("+%1%").arg(locale.toString(summary.totalReturnPct, 'f', 2))
         : QStringLiteral("%1%").arg(locale.toString(summary.totalReturnPct, 'f', 2));
     const QColor returnColor =
-        summary.totalReturnPct >= 0.0 ? QColor(0x1B, 0xAA, 0x3A) : QColor(0xF0, 0x3E, 0x3E);
+        summary.totalReturnPct >= 0.0 ?  QColor(0xF0, 0x3E, 0x3E) : QColor(0x1B, 0xAA, 0x3A);
     m_pnlLabel->setStyleSheet(
         QStringLiteral("color:%1;font-size:12px;line-height:1.5;").arg(returnColor.name()));
 
