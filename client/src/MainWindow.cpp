@@ -2,6 +2,8 @@
 
 #include "app/AppBranding.h"
 #include "app/KlineLoadConfig.h"
+#include "app/ServerConfig.h"
+#include "api/HttpBacktestClient.h"
 #include "api/HttpStockClient.h"
 #include "api/TcpCandleClient.h"
 #include "pages/HomePage.h"
@@ -9,50 +11,6 @@
 
 #include <QStatusBar>
 #include <QTimer>
-#include <QUrl>
-
-namespace {
-
-QHostAddress defaultHost()
-{
-    const QByteArray env = qgetenv("TRADING_TCP_HOST");
-    if (!env.isEmpty()) {
-        return QHostAddress(QString::fromUtf8(env));
-    }
-    const QByteArray httpEnv = qgetenv("TRADING_HTTP_HOST");
-    if (!httpEnv.isEmpty()) {
-        return QHostAddress(QString::fromUtf8(httpEnv));
-    }
-    return QHostAddress::LocalHost;
-}
-
-quint16 defaultTcpPort()
-{
-    const QByteArray env = qgetenv("TRADING_TCP_PORT");
-    if (!env.isEmpty()) {
-        return env.toUShort();
-    }
-    return 9000;
-}
-
-quint16 defaultHttpPort()
-{
-    const QByteArray env = qgetenv("TRADING_HTTP_PORT");
-    if (!env.isEmpty()) {
-        return env.toUShort();
-    }
-    return 9080;
-}
-
-QUrl httpBaseUrl(const QHostAddress &host, quint16 port)
-{
-    const QString hostStr =
-        host.protocol() == QAbstractSocket::IPv6Protocol ? QStringLiteral("[%1]").arg(host.toString())
-                                                         : host.toString();
-    return QUrl(QStringLiteral("http://%1:%2").arg(hostStr).arg(port));
-}
-
-} // namespace
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -60,10 +18,12 @@ MainWindow::MainWindow(QWidget *parent)
     , m_home(new HomePage())
     , m_detail(new StockDetailPage())
     , m_http(new HttpStockClient(this))
+    , m_backtestHttp(new HttpBacktestClient(this))
     , m_tcp(new TcpCandleClient(this))
-    , m_host(defaultHost())
-    , m_tcpPort(defaultTcpPort())
-    , m_httpPort(defaultHttpPort())
+    , m_host(ServerConfig::defaultHost())
+    , m_tcpPort(ServerConfig::defaultTcpPort())
+    , m_httpPort(ServerConfig::defaultHttpPort())
+    , m_httpBaseUrl(ServerConfig::httpBaseUrl(m_host, m_httpPort))
 {
     setCentralWidget(m_stack);
     m_stack->addWidget(m_home);
@@ -119,8 +79,12 @@ void MainWindow::wireConnections()
     connect(m_home, &HomePage::openStock, this, [this](const QString &symbol, const QString &name) {
         m_detail->setStock(symbol, name);
         m_stack->setCurrentWidget(m_detail);
+        m_http->fetchKlineRange(m_httpBaseUrl, symbol);
         m_tcp->requestCandles(symbol, std::nullopt, KlineLoadConfig::InitialBarLimit);
     });
+
+    connect(m_http, &HttpStockClient::klineRangeReceived, m_detail,
+            &StockDetailPage::setKlineFileTimeRange);
 
     connect(m_detail, &StockDetailPage::backRequested, this, [this] {
         m_stack->setCurrentWidget(m_home);
@@ -132,11 +96,24 @@ void MainWindow::wireConnections()
             });
 
     connect(m_tcp, &TcpCandleClient::candlesReceived, m_detail, &StockDetailPage::mergeCandles);
+
+    connect(m_detail, &StockDetailPage::backtestRequested, this,
+            [this](const QString &symbol, const QString &strategyId, qint64 startTs, qint64 endTs) {
+                m_detail->setBacktestRunning(true);
+                m_backtestHttp->runBacktest(m_httpBaseUrl, symbol, strategyId, startTs, endTs);
+            });
+    connect(m_backtestHttp, &HttpBacktestClient::backtestFinished, m_detail,
+            &StockDetailPage::setBacktestSignals);
+    connect(m_backtestHttp, &HttpBacktestClient::backtestFinished, this, [this]() {
+        m_detail->setBacktestRunning(false);
+    });
+    connect(m_backtestHttp, &HttpBacktestClient::backtestError, m_detail,
+            &StockDetailPage::setBacktestError);
 }
 
 void MainWindow::fetchStockList()
 {
-    m_http->fetchStockList(httpBaseUrl(m_host, m_httpPort));
+    m_http->fetchStockList(m_httpBaseUrl);
 }
 
 void MainWindow::connectIfNeeded()

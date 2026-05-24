@@ -6,7 +6,7 @@ MockTrader is split into a **Rust server** and a **Qt 6 desktop client**. Market
 
 | Transport | Port (default) | Purpose |
 |-----------|----------------|---------|
-| HTTP (Axum) | 9080 | Stock list (`GET /api/stocks`) |
+| HTTP (Axum) | 9080 | Stock list, K-line file time range, backtest |
 | TCP (binary frames) | 9000 | K-line + indicator chunks (`GetCandles`) |
 
 ## Server (`crates/`)
@@ -16,36 +16,37 @@ src/
   main.rs          # boots HTTP + TCP
   config.rs        # env: TRADING_*_HOST/PORT, KLINE_DIR
   api/             # client-facing transports
-    mod.rs         # AppState, re-exports
-    model.rs       # StockEntry, StockListResponse (JSON)
-    http.rs        # Axum GET /api/stocks
+    mod.rs         # AppState
+    model.rs       # JSON request/response types
+    http.rs        # GET /api/stocks, /api/kline/range; POST /api/backtest
     tcp.rs         # per-connection TCP handler
-  kline/           # .bin I/O, indicator warmup, encode window
+  kline/           # .bin I/O, binary search, backtest window
+    parse.rs       # OHLC + unix timestamp from records
+    range.rs       # file min/max ts, index by timestamp
+  strategy/        # MACD cross signals + PnL summary
   indicators/      # MACD/KDJ → i32×100 wire values
   protocol/
-    candle.rs      # TCP framing & GetCandles codec only
+    candle.rs      # TCP framing & GetCandles codec
 ```
 
-Data flow for candles:
+**Candle path:** client `GetCandles` → `KlineStore::read_candles_raw` (warmup + indicators) → `CandleChunk`.
 
-1. Client sends `GetCandles` over TCP.
-2. `KlineStore::read_candles_raw` loads warmup bars, computes indicators, returns records + indicator bytes for the requested window.
-3. Server replies with `CandleChunk` (start index, total, raw bytes).
+**Backtest path:** `POST /api/backtest` → binary search `[startTs, endTs]` → strategy signals + `compute_pnl`.
 
 ## Client (`client/src/`)
 
 ```
-app/           # theme, branding, load limits (KlineLoadConfig)
-model/         # CandleBar, StockRow, IndicatorBar
-protocol/      # TcpCandleCodec (encode/decode TCP + bin records)
-api/           # HttpStockClient, TcpCandleClient
-pages/         # HomePage, StockDetailPage
-widgets/       # timeline, list delegate
-MainWindow.cpp # wires HTTP list + TCP candles
+app/           # theme, branding, ServerConfig (env host/ports), KlineLoadConfig
+api/           # HttpApiUrl, HttpStockClient, HttpBacktestClient, TcpCandleClient
+model/         # CandleBar, StockRow, IndicatorBar, backtest types
+protocol/      # TcpCandleCodec
+pages/         # HomePage, StockDetailPage (chart + BacktestPanel)
+widgets/       # KlineTimelineBar, StrategyPicker, StockListDelegate, BacktestPanel
+MainWindow.cpp # wires HTTP list/range/backtest + TCP candles
 ```
 
-- **Home**: `HttpStockClient` → `GET /api/stocks` → `HomePage::setStocks`.
-- **Detail**: `TcpCandleClient` → binary `GetCandles` → charts.
+- **Home:** `GET /api/stocks`.
+- **Detail:** TCP candles; `GET /api/kline/range` for backtest time bounds; `POST /api/backtest` for signals/PnL overlay.
 
 ## On-disk K-line format
 

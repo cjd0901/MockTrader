@@ -1,9 +1,13 @@
 #include "StockDetailPage.h"
 
 #include "app/KlineLoadConfig.h"
+#include "widgets/BacktestPanel.h"
 #include "widgets/KlineTimelineBar.h"
 
+#include <QtCharts/QAreaSeries>
 #include <QtCharts/QCandlestickSet>
+#include <QGraphicsLineItem>
+#include <QHBoxLayout>
 
 #include <QDateTime>
 #include <QEvent>
@@ -14,6 +18,7 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPalette>
+#include <QResizeEvent>
 #include <QPushButton>
 #include <QTimeZone>
 #include <QTimer>
@@ -108,6 +113,9 @@ const QColor kMacdDeaColor{0xFF, 0x88, 0x00};
 const QColor kKdjKColor{0xFF, 0xC1, 0x07};
 const QColor kKdjDColor{0x42, 0x85, 0xF4};
 const QColor kKdjJColor{0xAB, 0x47, 0xBC};
+const QColor kSignalBuyColor{0x25, 0x63, 0xEB};
+const QColor kSignalSellColor{0xEA, 0x58, 0x0C};
+const QColor kBacktestBandFill{0xDB, 0xEA, 0xFE, 110};
 
 QGraphicsTextItem *makeChartLabel(const QString &text, const QColor &color, QChart *chart,
                                 bool bold = false, int pointSize = 9)
@@ -176,6 +184,76 @@ void styleMainChartAxisY(QValueAxis *axis)
     gridPen.setCosmetic(true);
     axis->setGridLinePen(gridPen);
     axis->setGridLineVisible(true);
+}
+
+void styleClearBacktestButton(QPushButton *button)
+{
+    button->setCursor(Qt::PointingHandCursor);
+    button->setStyleSheet(QStringLiteral(
+        "QPushButton {"
+        "  color: #1D4ED8;"
+        "  background: #EFF6FF;"
+        "  border: 1px solid #BFDBFE;"
+        "  border-radius: 8px;"
+        "  padding: 5px 12px;"
+        "  font-size: 12px;"
+        "}"
+        "QPushButton:hover {"
+        "  background: #DBEAFE;"
+        "}"
+        "QPushButton:pressed {"
+        "  background: #BFDBFE;"
+        "}"));
+}
+
+struct TradeMarkerLayout {
+    QPointF anchor;
+    QPointF labelPos;
+    QPointF stemEnd;
+};
+
+TradeMarkerLayout layoutTradeMarker(QChart *chart, QCandlestickSeries *series, qreal x,
+                                    qreal barLow, qreal barHigh, const QRectF &labelBounds,
+                                    qreal stemLen, bool defaultBelow, const QRectF &plot)
+{
+    auto anchorFor = [&](bool below) {
+        const qreal y = below ? barLow : barHigh;
+        return chart->mapToPosition(QPointF(x, y), series);
+    };
+
+    auto labelPosFor = [&](const QPointF &anchor, bool below) {
+        if (below) {
+            return QPointF(anchor.x() - labelBounds.width() / 2.0, anchor.y() + stemLen);
+        }
+        return QPointF(anchor.x() - labelBounds.width() / 2.0,
+                       anchor.y() - stemLen - labelBounds.height());
+    };
+
+    bool below = defaultBelow;
+    QPointF anchor = anchorFor(below);
+    QPointF labelPos = labelPosFor(anchor, below);
+    QRectF labelRect(labelPos, labelBounds.size());
+
+    if (labelRect.bottom() > plot.bottom()) {
+        below = false;
+        anchor = anchorFor(below);
+        labelPos = labelPosFor(anchor, below);
+        labelRect = QRectF(labelPos, labelBounds.size());
+    }
+    if (labelRect.top() < plot.top()) {
+        below = true;
+        anchor = anchorFor(below);
+        labelPos = labelPosFor(anchor, below);
+        labelRect = QRectF(labelPos, labelBounds.size());
+    }
+
+    labelPos.setX(qBound(plot.left(), labelPos.x(), plot.right() - labelBounds.width()));
+    labelRect.moveTopLeft(labelPos);
+
+    const QPointF stemEnd(labelRect.center().x(),
+                          below ? labelRect.top() : labelRect.bottom());
+
+    return {anchor, labelPos, stemEnd};
 }
 
 void styleBackButton(QPushButton *button)
@@ -326,13 +404,18 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     : QWidget(parent)
     , m_title(new QLabel(this))
     , m_back(new QPushButton(this))
+    , m_clearBacktestBtn(new QPushButton(tr("清空回测数据"), this))
     , m_timeline(new KlineTimelineBar(this))
     , m_chart(new QChart())
     , m_view(new QChartView(m_chart))
     , m_axisX(new QValueAxis())
     , m_axisY(new QValueAxis())
+    , m_backtestAreaUpper(new QLineSeries())
+    , m_backtestAreaLower(new QLineSeries())
+    , m_backtestArea(new QAreaSeries(m_backtestAreaUpper, m_backtestAreaLower))
     , m_seriesUp(new QCandlestickSeries())
     , m_seriesDown(new QCandlestickSeries())
+    , m_backtestPanel(new BacktestPanel(this))
     , m_macdHist(new QBarSeries())
     , m_macdDif(new QLineSeries())
     , m_macdDea(new QLineSeries())
@@ -345,9 +428,14 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     m_chart->setAnimationOptions(QChart::NoAnimation);
     m_chart->setMargins(kMainChartMargins);
 
+    m_backtestArea->setBrush(QBrush(kBacktestBandFill));
+    m_backtestArea->setPen(Qt::NoPen);
+    m_backtestArea->setVisible(false);
+
     styleCandleSeries(m_seriesUp, kEastMoneyUp);
     styleCandleSeries(m_seriesDown, kEastMoneyDown);
 
+    m_chart->addSeries(m_backtestArea);
     m_chart->addSeries(m_seriesUp);
     m_chart->addSeries(m_seriesDown);
 
@@ -360,6 +448,8 @@ StockDetailPage::StockDetailPage(QWidget *parent)
 
     m_chart->addAxis(m_axisX, Qt::AlignBottom);
     m_chart->addAxis(m_axisY, Qt::AlignLeft);
+    m_backtestArea->attachAxis(m_axisX);
+    m_backtestArea->attachAxis(m_axisY);
     for (QCandlestickSeries *s : {m_seriesUp, m_seriesDown}) {
         s->attachAxis(m_axisX);
         s->attachAxis(m_axisY);
@@ -429,38 +519,60 @@ StockDetailPage::StockDetailPage(QWidget *parent)
 
     m_title->setStyleSheet(QStringLiteral("color:#222;font-size:15px;font-weight:600;padding:0;"));
 
-    auto *chartPanel = new QFrame(this);
-    chartPanel->setObjectName(QStringLiteral("chartPanel"));
-    chartPanel->setAttribute(Qt::WA_StyledBackground, true);
-    chartPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    chartPanel->setStyleSheet(QStringLiteral(
+    m_chartPanel = new QFrame(this);
+    m_chartPanel->setObjectName(QStringLiteral("chartPanel"));
+    m_chartPanel->setAttribute(Qt::WA_StyledBackground, true);
+    m_chartPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_chartPanel->setStyleSheet(QStringLiteral(
         "#chartPanel {"
         "  background-color: #FFFFFF;"
         "  border: 1px solid #DCDCDC;"
         "  border-radius: 12px;"
         "}"));
 
-    auto *panelLayout = new QVBoxLayout(chartPanel);
+    styleClearBacktestButton(m_clearBacktestBtn);
+    m_clearBacktestBtn->setParent(this);
+    m_clearBacktestBtn->raise();
+    m_clearBacktestBtn->hide();
+
+    auto *panelLayout = new QVBoxLayout(m_chartPanel);
     panelLayout->setContentsMargins(8, 8, 8, 10);
     panelLayout->setSpacing(0);
     panelLayout->addWidget(m_view, 4);
-    panelLayout->addWidget(makeChartDivider(chartPanel));
+    panelLayout->addWidget(makeChartDivider(m_chartPanel));
     panelLayout->addWidget(m_macdChart.view, 2);
-    panelLayout->addWidget(makeChartDivider(chartPanel));
+    panelLayout->addWidget(makeChartDivider(m_chartPanel));
     panelLayout->addWidget(m_kdjChart.view, 2);
     panelLayout->addWidget(m_timeline, 0);
 
+    m_chartPanel->installEventFilter(this);
+
     setAutoFillBackground(true);
     setStyleSheet(QStringLiteral("StockDetailPage { background-color: #F3F4F6; }"));
+
+    auto *mainRow = new QHBoxLayout();
+    mainRow->setSpacing(12);
+    mainRow->addWidget(m_chartPanel, 1);
+    mainRow->addWidget(m_backtestPanel, 0, Qt::AlignTop);
 
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(24, 20, 24, 20);
     root->setSpacing(12);
     root->addLayout(top);
     root->addWidget(m_title);
-    root->addWidget(chartPanel, 1);
+    root->addLayout(mainRow, 1);
 
     connect(m_back, &QPushButton::clicked, this, &StockDetailPage::backRequested);
+    connect(m_clearBacktestBtn, &QPushButton::clicked, this, [this]() { clearBacktestOverlay(); });
+    connect(m_backtestPanel, &BacktestPanel::runRequested, this,
+            [this](const QString &strategyId, qint64 startTs, qint64 endTs) {
+                m_backtestRangeStartTs = startTs;
+                m_backtestRangeEndTs = endTs;
+                m_backtestOverlayActive = true;
+                m_clearBacktestBtn->show();
+                positionClearBacktestButton();
+                emit backtestRequested(m_symbol, strategyId, startTs, endTs);
+            });
     connect(m_timeline, &KlineTimelineBar::valueChanged, this, [this](int) {
         if (m_updatingScroll || m_candles.isEmpty()) {
             return;
@@ -475,7 +587,15 @@ StockDetailPage::StockDetailPage(QWidget *parent)
             checkPrefetch();
         }
     });
-    connect(m_chart, &QChart::plotAreaChanged, this, &StockDetailPage::updateExtremaLabels);
+    connect(m_chart, &QChart::plotAreaChanged, this, [this]() {
+        updateExtremaLabels();
+        if (!m_candles.isEmpty()) {
+            const int start = m_timeline->value();
+            const int count = qMin(m_visibleBarCount, m_candles.size() - start);
+            updateBacktestRangeBands(start, count);
+            updateBacktestMarkers(start, count);
+        }
+    });
     connect(m_macdChart.chart, &QChart::plotAreaChanged, this, &StockDetailPage::updateSubChartHeaders);
     connect(m_kdjChart.chart, &QChart::plotAreaChanged, this, &StockDetailPage::updateSubChartHeaders);
 }
@@ -492,6 +612,14 @@ void StockDetailPage::resetCandles()
 {
     m_candles.clear();
     m_indicators.clear();
+    m_backtestSignals.clear();
+    m_backtestRangeStartTs = 0;
+    m_backtestRangeEndTs = 0;
+    m_backtestOverlayActive = false;
+    clearTradeMarkers();
+    clearBacktestRangeBands();
+    m_clearBacktestBtn->hide();
+    m_backtestPanel->setFileTimeRange(0, 0);
     m_oldestLoadedIndex = 0;
     m_totalCount = 0;
     m_prefetchInFlight = false;
@@ -511,7 +639,7 @@ void StockDetailPage::resetCandles()
     hideCandleDetail();
     m_focusBarIndex = -1;
     m_updatingScroll = true;
-    m_timeline->setCandles({}, m_visibleBarCount);
+    m_timeline->setVisibleBarCount(m_visibleBarCount);
     m_timeline->setRange(0, 0);
     m_timeline->setValue(0);
     m_updatingScroll = false;
@@ -528,15 +656,24 @@ void StockDetailPage::mergeCandles(const QString &symbol, quint64 startIndex, qu
     m_prefetchInFlight = false;
     m_totalCount = total;
 
-    const bool firstLoad = m_candles.isEmpty();
-    const int scrollBefore = m_timeline->value();
-
-    if (firstLoad) {
+    if (m_candles.isEmpty()) {
         m_candles = candles;
         m_indicators = indicators;
         m_oldestLoadedIndex = startIndex;
-    } else if (startIndex < m_oldestLoadedIndex) {
+        syncTimelineRange();
+        scrollToLatest();
+        updateBacktestTimeBounds();
+        renderVisibleWindow();
+        return;
+    }
+
+    const quint64 loadedEnd = m_oldestLoadedIndex + static_cast<quint64>(m_candles.size());
+    const quint64 chunkEnd = startIndex + static_cast<quint64>(candles.size());
+
+    if (chunkEnd <= m_oldestLoadedIndex) {
         const int added = static_cast<int>(candles.size());
+        const int scrollBefore = m_timeline->value();
+
         QVector<CandleBar> mergedCandles;
         mergedCandles.reserve(added + m_candles.size());
         mergedCandles += candles;
@@ -553,18 +690,205 @@ void StockDetailPage::mergeCandles(const QString &symbol, quint64 startIndex, qu
 
         syncTimelineRange();
         m_updatingScroll = true;
-        m_timeline->setValue(scrollBefore + added);
+        m_timeline->setValue(qBound(0, scrollBefore + added, m_timeline->maximum()));
         m_updatingScroll = false;
 
+        updateBacktestTimeBounds();
         renderVisibleWindow();
-        return;
-    } else {
         return;
     }
 
-    syncTimelineRange();
-    scrollToLatest();
+    if (startIndex >= loadedEnd) {
+        m_candles += candles;
+        m_indicators += indicators;
+        syncTimelineRange();
+        updateBacktestTimeBounds();
+        renderVisibleWindow();
+        return;
+    }
+
+    // Overlapping chunk (e.g. duplicate response) — ignore.
+}
+
+void StockDetailPage::clearBacktestOverlay()
+{
+    m_backtestSignals.clear();
+    m_backtestRangeStartTs = 0;
+    m_backtestRangeEndTs = 0;
+    m_backtestOverlayActive = false;
+    clearTradeMarkers();
+    clearBacktestRangeBands();
+    m_clearBacktestBtn->hide();
+    m_backtestPanel->setResultText(tr("选择时间范围后点击执行回测"));
+    if (!m_candles.isEmpty()) {
+        renderVisibleWindow();
+    }
+}
+
+void StockDetailPage::setBacktestSignals(const QVector<TradeSignal> &tradeSignals,
+                                         const BacktestSummary &summary)
+{
+    m_backtestSignals = tradeSignals;
+    m_backtestOverlayActive = true;
+    m_clearBacktestBtn->show();
+    positionClearBacktestButton();
+    int buyCount = 0;
+    int sellCount = 0;
+    for (const TradeSignal &s : m_backtestSignals) {
+        if (s.side == QStringLiteral("buy")) {
+            ++buyCount;
+        } else if (s.side == QStringLiteral("sell")) {
+            ++sellCount;
+        }
+    }
+    m_backtestPanel->setBacktestResult(summary, buyCount, sellCount);
     renderVisibleWindow();
+}
+
+void StockDetailPage::setBacktestRunning(bool running)
+{
+    m_backtestPanel->setRunning(running);
+}
+
+void StockDetailPage::setBacktestError(const QString &message)
+{
+    m_backtestPanel->setRunning(false);
+    m_backtestPanel->setResultText(tr("回测失败：%1").arg(message));
+}
+
+void StockDetailPage::setKlineFileTimeRange(const QString &symbol, qint64 minTsSec, qint64 maxTsSec)
+{
+    if (symbol != m_symbol) {
+        return;
+    }
+    m_backtestPanel->setFileTimeRange(minTsSec, maxTsSec);
+    updateBacktestTimeBounds();
+}
+
+void StockDetailPage::updateBacktestTimeBounds()
+{
+    if (m_candles.isEmpty()) {
+        return;
+    }
+    m_backtestPanel->expandLoadedRange(m_candles.first().tsSec, m_candles.last().tsSec);
+}
+
+void StockDetailPage::clearTradeMarkers()
+{
+    for (ChartTradeMarker &m : m_tradeMarkers) {
+        delete m.stem;
+        delete m.label;
+    }
+    m_tradeMarkers.clear();
+}
+
+void StockDetailPage::clearBacktestRangeBands()
+{
+    m_backtestAreaUpper->clear();
+    m_backtestAreaLower->clear();
+    m_backtestArea->setVisible(false);
+}
+
+void StockDetailPage::updateBacktestRangeBands(int visibleStart, int visibleCount)
+{
+    m_backtestAreaUpper->clear();
+    m_backtestAreaLower->clear();
+    m_backtestArea->setVisible(false);
+
+    if (!m_backtestOverlayActive || m_backtestRangeStartTs <= 0
+        || m_backtestRangeEndTs < m_backtestRangeStartTs || m_candles.isEmpty()
+        || visibleCount <= 0) {
+        return;
+    }
+
+    const int visEnd = qMin(visibleStart + visibleCount, m_candles.size());
+    if (m_candles[visEnd - 1].tsSec < m_backtestRangeStartTs
+        || m_candles[visibleStart].tsSec > m_backtestRangeEndTs) {
+        return;
+    }
+
+    int firstInRange = -1;
+    int lastInRange = -1;
+    for (int i = visibleStart; i < visEnd; ++i) {
+        const qint64 ts = m_candles[i].tsSec;
+        if (ts < m_backtestRangeStartTs || ts > m_backtestRangeEndTs) {
+            continue;
+        }
+        if (firstInRange < 0) {
+            firstInRange = i;
+        }
+        lastInRange = i;
+    }
+    if (firstInRange < 0) {
+        return;
+    }
+
+    qreal xLeft = static_cast<qreal>(firstInRange - visibleStart) - 0.5;
+    qreal xRight = static_cast<qreal>(lastInRange - visibleStart) + 0.5;
+
+    if (visibleStart > 0 && m_candles[visibleStart].tsSec > m_backtestRangeStartTs) {
+        xLeft = -0.5;
+    }
+    if (visEnd < m_candles.size() && m_candles[visEnd - 1].tsSec < m_backtestRangeEndTs) {
+        xRight = static_cast<qreal>(visibleCount) - 0.5;
+    }
+
+    const double yTop = m_axisY->max();
+    const double yBottom = m_axisY->min();
+
+    m_backtestAreaUpper->append(xLeft, yTop);
+    m_backtestAreaUpper->append(xRight, yTop);
+    m_backtestAreaLower->append(xLeft, yBottom);
+    m_backtestAreaLower->append(xRight, yBottom);
+    m_backtestArea->setVisible(true);
+}
+
+void StockDetailPage::updateBacktestMarkers(int visibleStart, int visibleCount)
+{
+    clearTradeMarkers();
+    if (m_backtestSignals.isEmpty() || m_candles.isEmpty() || visibleCount <= 0) {
+        return;
+    }
+
+    const int visEnd = qMin(visibleStart + visibleCount, m_candles.size());
+    const qreal stemLen = 22.0;
+    const QRectF plot = m_chart->plotArea();
+
+    for (const TradeSignal &sig : m_backtestSignals) {
+        if (sig.barIndex < m_oldestLoadedIndex) {
+            continue;
+        }
+        const int arrayIdx = static_cast<int>(sig.barIndex - m_oldestLoadedIndex);
+        if (arrayIdx < visibleStart || arrayIdx >= visEnd) {
+            continue;
+        }
+
+        const qreal x = static_cast<qreal>(arrayIdx - visibleStart);
+        const CandleBar &bar = m_candles[arrayIdx];
+        const bool isBuy = sig.side == QStringLiteral("buy");
+        const QColor color = isBuy ? kSignalBuyColor : kSignalSellColor;
+        const QString tag = isBuy ? QStringLiteral("B") : QStringLiteral("S");
+
+        auto *label = makeChartLabel(tag, color, m_chart, true, 11);
+        label->setZValue(200);
+        const QRectF bounds = label->boundingRect();
+
+        const bool defaultBelow = isBuy;
+        const TradeMarkerLayout layout = layoutTradeMarker(
+            m_chart, m_seriesUp, x, bar.low, bar.high, bounds, stemLen, defaultBelow, plot);
+
+        label->setPos(layout.labelPos);
+
+        auto *stem = new QGraphicsLineItem(m_chart);
+        stem->setZValue(190);
+        stem->setPen(QPen(color, 1.0, Qt::DashLine));
+        stem->setLine(QLineF(layout.anchor, layout.stemEnd));
+
+        ChartTradeMarker marker;
+        marker.stem = stem;
+        marker.label = label;
+        m_tradeMarkers.push_back(marker);
+    }
 }
 
 void StockDetailPage::updateFlatBodyHalfForAxis(double axisMin, double axisMax)
@@ -704,8 +1028,31 @@ void StockDetailPage::hideCandleDetail()
     }
 }
 
+void StockDetailPage::positionClearBacktestButton()
+{
+    if (!m_chartPanel || m_clearBacktestBtn->isHidden()) {
+        return;
+    }
+    const QSize sh = m_clearBacktestBtn->sizeHint();
+    const QPoint panelTopRight = m_chartPanel->mapTo(this, QPoint(m_chartPanel->width(), 0));
+    const int x = panelTopRight.x() - sh.width();
+    const int y = panelTopRight.y() - sh.height() - 6;
+    m_clearBacktestBtn->setGeometry(x, y, sh.width(), sh.height());
+}
+
+void StockDetailPage::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    positionClearBacktestButton();
+}
+
 bool StockDetailPage::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_chartPanel && event->type() == QEvent::Resize) {
+        positionClearBacktestButton();
+        return QWidget::eventFilter(watched, event);
+    }
+
     if (watched != m_view->viewport()) {
         return QWidget::eventFilter(watched, event);
     }
@@ -889,6 +1236,8 @@ void StockDetailPage::renderVisibleWindow()
 
     renderMacdChart(start, end);
     renderKdjChart(start, end);
+    updateBacktestRangeBands(start, count);
+    updateBacktestMarkers(start, count);
 
     const int readoutIndex =
         m_focusBarIndex >= 0 ? m_focusBarIndex : defaultBarIndex();
@@ -951,7 +1300,7 @@ void StockDetailPage::syncTimelineRange()
     const int n = m_candles.size();
     const int maxStart = qMax(0, n - m_visibleBarCount);
 
-    m_timeline->setCandles(m_candles, m_visibleBarCount);
+    m_timeline->setVisibleBarCount(m_visibleBarCount);
 
     m_updatingScroll = true;
     m_timeline->setRange(0, maxStart);
@@ -979,15 +1328,10 @@ void StockDetailPage::checkPrefetch()
     }
 
     const int start = m_timeline->value();
-    const qint64 oldestTs = m_candles.first().tsSec;
-    const qint64 loadedSpan = qMax<qint64>(1, m_candles.last().tsSec - oldestTs);
-
-    const qint64 bufferSec = loadedSpan * KlineLoadConfig::PrefetchBufferTradingDays
-        / qMax(1, KlineLoadConfig::InitialTradingDays);
-
-    const qint64 viewportOldestTs = m_candles[qBound(0, start, m_candles.size() - 1)].tsSec;
-    if (viewportOldestTs - oldestTs <= bufferSec) {
-        m_prefetchInFlight = true;
-        emit needOlderCandles(m_symbol, m_oldestLoadedIndex);
+    if (start > KlineLoadConfig::PrefetchBufferBars) {
+        return;
     }
+
+    m_prefetchInFlight = true;
+    emit needOlderCandles(m_symbol, m_oldestLoadedIndex);
 }

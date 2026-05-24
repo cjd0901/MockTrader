@@ -1,5 +1,7 @@
 #include "KlineTimelineBar.h"
 
+#include "app/KlineLoadConfig.h"
+
 #include <QMouseEvent>
 #include <QPainter>
 
@@ -24,11 +26,9 @@ KlineTimelineBar::KlineTimelineBar(QWidget *parent)
     setCursor(Qt::SizeHorCursor);
 }
 
-void KlineTimelineBar::setCandles(const QVector<CandleBar> &candles, int visibleBarCount)
+void KlineTimelineBar::setVisibleBarCount(int visibleBarCount)
 {
-    m_candles = candles;
     m_visibleBarCount = qMax(1, visibleBarCount);
-    Q_UNUSED(m_candles);
     update();
 }
 
@@ -70,11 +70,13 @@ QRectF KlineTimelineBar::scaleRect() const
 qreal KlineTimelineBar::scrollTravelPx() const
 {
     const QRectF area = scaleRect();
-    if (m_candles.isEmpty() || area.width() <= 1) {
-        return 1.0;
+    const int span = m_maxValue - m_minValue;
+    if (span <= 0 || area.width() <= 1.0) {
+        return qMax(1.0, area.width());
     }
+    const int totalBars = span + m_visibleBarCount;
     const qreal thumbW =
-        qMax(20.0, area.width() * static_cast<qreal>(m_visibleBarCount) / static_cast<qreal>(m_candles.size()));
+        qMax(20.0, area.width() * static_cast<qreal>(m_visibleBarCount) / static_cast<qreal>(totalBars));
     return qMax(1.0, area.width() - thumbW);
 }
 
@@ -109,7 +111,7 @@ void KlineTimelineBar::paintEvent(QPaintEvent *)
 
     painter.fillRect(rect(), QColor(0xFF, 0xFF, 0xFF));
 
-    if (m_candles.isEmpty()) {
+    if (m_maxValue <= m_minValue) {
         return;
     }
 
@@ -118,7 +120,7 @@ void KlineTimelineBar::paintEvent(QPaintEvent *)
 
 void KlineTimelineBar::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() != Qt::LeftButton || m_candles.isEmpty()) {
+    if (event->button() != Qt::LeftButton || m_maxValue <= m_minValue) {
         return;
     }
 
@@ -127,23 +129,36 @@ void KlineTimelineBar::mousePressEvent(QMouseEvent *event)
     }
 
     m_dragging = true;
-    m_dragPressX = event->position().x();
-    m_dragPressValue = m_value;
+    m_lastDragX = event->position().x();
+    m_dragValueAccum = 0.0;
+    grabMouse();
 }
 
 void KlineTimelineBar::mouseMoveEvent(QMouseEvent *event)
 {
-    if (!m_dragging || m_candles.isEmpty()) {
+    if (!m_dragging || m_maxValue <= m_minValue) {
         return;
     }
 
     const qreal travel = scrollTravelPx();
-    const qreal deltaPx = event->position().x() - m_dragPressX;
-    const int span = m_maxValue - m_minValue;
-    const int deltaValue =
-        span > 0 ? static_cast<int>(std::lround(deltaPx / travel * static_cast<qreal>(span))) : 0;
+    const qreal x = event->position().x();
+    const qreal deltaPx = x - m_lastDragX;
+    m_lastDragX = x;
 
-    applyValue(qBound(m_minValue, m_dragPressValue + deltaValue, m_maxValue), true);
+    const int span = m_maxValue - m_minValue;
+    if (span <= 0 || qAbs(deltaPx) < 0.25) {
+        return;
+    }
+
+    m_dragValueAccum +=
+        deltaPx / (travel * KlineLoadConfig::TimelineDragScale) * static_cast<qreal>(span);
+    const int step = static_cast<int>(m_dragValueAccum);
+    if (step == 0) {
+        return;
+    }
+    m_dragValueAccum -= static_cast<qreal>(step);
+
+    applyValue(qBound(m_minValue, m_value + step, m_maxValue), true);
     update();
 }
 
@@ -154,11 +169,20 @@ void KlineTimelineBar::mouseReleaseEvent(QMouseEvent *event)
     }
     if (m_dragging) {
         m_dragging = false;
+        releaseMouse();
         emit interactionEnded();
     }
 }
 
 void KlineTimelineBar::wheelEvent(QWheelEvent *event)
 {
-    event->ignore();
+    if (m_maxValue <= m_minValue) {
+        event->ignore();
+        return;
+    }
+    const int wheelStep = qMax(1, static_cast<int>(5.0 / KlineLoadConfig::TimelineDragScale));
+    const int delta = event->angleDelta().y() > 0 ? -wheelStep : wheelStep;
+    applyValue(qBound(m_minValue, m_value + delta, m_maxValue), true);
+    update();
+    event->accept();
 }

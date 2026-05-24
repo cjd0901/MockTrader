@@ -3,6 +3,7 @@ mod config;
 mod indicators;
 mod kline;
 mod protocol;
+mod strategy;
 
 use std::sync::Arc;
 

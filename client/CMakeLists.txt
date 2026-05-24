@@ -21,6 +21,8 @@ add_executable(mock_trader_client
 
     # application config & theme
     src/app/KlineLoadConfig.h
+    src/app/ServerConfig.cpp
+    src/app/ServerConfig.h
     src/app/AppBranding.cpp
     src/app/AppBranding.h
     src/app/AppStyle.cpp
@@ -30,6 +32,10 @@ add_executable(mock_trader_client
     src/model/MarketTypes.h
     src/protocol/TcpCandleCodec.cpp
     src/protocol/TcpCandleCodec.h
+    src/api/HttpApiUrl.cpp
+    src/api/HttpApiUrl.h
+    src/api/HttpBacktestClient.cpp
+    src/api/HttpBacktestClient.h
     src/api/HttpStockClient.cpp
     src/api/HttpStockClient.h
     src/api/TcpCandleClient.cpp
@@ -42,6 +48,10 @@ add_executable(mock_trader_client
     src/pages/StockDetailPage.h
     src/widgets/KlineTimelineBar.cpp
     src/widgets/KlineTimelineBar.h
+    src/widgets/BacktestPanel.cpp
+    src/widgets/BacktestPanel.h
+    src/widgets/StrategyPicker.cpp
+    src/widgets/StrategyPicker.h
     src/widgets/StockListDelegate.cpp
     src/widgets/StockListDelegate.h
 )

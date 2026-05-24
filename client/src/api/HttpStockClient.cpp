@@ -1,35 +1,14 @@
 #include "api/HttpStockClient.h"
 
+#include "api/HttpApiUrl.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QUrl>
-
-namespace {
-
-QUrl stocksEndpoint(const QUrl &baseUrl)
-{
-    QUrl url = baseUrl;
-    if (!url.isValid()) {
-        return {};
-    }
-    QString path = url.path();
-    if (path.isEmpty() || path == QStringLiteral("/")) {
-        url.setPath(QStringLiteral("/api/stocks"));
-    } else if (!path.endsWith(QStringLiteral("/api/stocks"))) {
-        if (!path.endsWith(QLatin1Char('/'))) {
-            path += QLatin1Char('/');
-        }
-        path += QStringLiteral("api/stocks");
-        url.setPath(path);
-    }
-    return url;
-}
-
-} // namespace
+#include <QUrlQuery>
 
 HttpStockClient::HttpStockClient(QObject *parent)
     : QObject(parent)
@@ -41,7 +20,7 @@ HttpStockClient::~HttpStockClient() = default;
 
 void HttpStockClient::fetchStockList(const QUrl &baseUrl)
 {
-    const QUrl endpoint = stocksEndpoint(baseUrl);
+    const QUrl endpoint = HttpApiUrl::resolve(baseUrl, QStringLiteral("/api/stocks"));
     if (!endpoint.isValid()) {
         emit fetchError(tr("无效的 HTTP 地址"));
         return;
@@ -93,5 +72,53 @@ void HttpStockClient::fetchStockList(const QUrl &baseUrl)
         }
 
         emit stockListReceived(rows);
+    });
+}
+
+void HttpStockClient::fetchKlineRange(const QUrl &baseUrl, const QString &symbol)
+{
+    if (symbol.isEmpty()) {
+        emit fetchError(tr("无效的股票代码"));
+        return;
+    }
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("symbol"), symbol);
+    const QUrl endpoint =
+        HttpApiUrl::resolve(baseUrl, QStringLiteral("/api/kline/range"), query);
+    if (!endpoint.isValid()) {
+        emit fetchError(tr("无效的 HTTP 地址"));
+        return;
+    }
+
+    QNetworkRequest req(endpoint);
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("MockTraderClient/1.0"));
+
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, symbol]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit fetchError(reply->errorString());
+            return;
+        }
+
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            emit fetchError(tr("K 线范围 JSON 解析失败: %1").arg(parseError.errorString()));
+            return;
+        }
+
+        const QJsonObject root = doc.object();
+        const qint64 minTs = root.value(QStringLiteral("minTs")).toInteger();
+        const qint64 maxTs = root.value(QStringLiteral("maxTs")).toInteger();
+        const quint64 totalBars =
+            static_cast<quint64>(root.value(QStringLiteral("totalBars")).toDouble());
+        if (minTs <= 0 || maxTs < minTs) {
+            emit fetchError(tr("K 线时间范围无效"));
+            return;
+        }
+
+        emit klineRangeReceived(symbol, minTs, maxTs, totalBars);
     });
 }

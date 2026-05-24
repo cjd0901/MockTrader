@@ -19,6 +19,25 @@ struct StockRow
     QString displayName;
 };
 
+struct TradeSignal
+{
+    quint64 barIndex = 0;
+    qint64 tsSec = 0;
+    QString side;
+    double price = 0.0;
+};
+
+struct BacktestSummary
+{
+    double initialCapital = 100000.0;
+    double finalEquity = 100000.0;
+    double totalReturnPct = 0.0;
+    quint32 roundTrips = 0;
+    quint32 winCount = 0;
+    quint32 lossCount = 0;
+    bool openPosition = false;
+};
+
 struct IndicatorBar
 {
     double macdDif = 0.0;

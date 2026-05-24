@@ -144,10 +144,13 @@ cmake --build build -j
 3. Drag the **timeline** at the bottom to scroll; older bars are prefetched near the left edge.
 4. View **MACD** (DIF, DEA, histogram) and **KDJ** computed on the server; colored readouts match chart lines.
 5. Double-click the main chart for OHLC detail; high/low labels track the visible window.
+6. Use the **backtest panel** on the right: pick a strategy (e.g. MACD golden cross / death cross), set a time range within the loaded bars, then run. The server binary-searches the `.bin` file for that range and returns buy/sell markers on the chart.
 
 Tune bar counts in `client/src/KlineLoadConfig.h` (`VisibleBarCount`, `InitialBarLimit`, etc.).
 
-## HTTP API (stock list)
+## HTTP API
+
+### Stock list
 
 `GET /api/stocks` → JSON:
 
@@ -158,6 +161,50 @@ Tune bar counts in `client/src/KlineLoadConfig.h` (`VisibleBarCount`, `InitialBa
   ]
 }
 ```
+
+### K-line file time range
+
+`GET /api/kline/range?symbol=002475` → JSON:
+
+```json
+{ "minTs": 1704159000, "maxTs": 1710000000, "totalBars": 12000 }
+```
+
+Timestamps are read from the first and last records in the symbol `.bin` file (used for backtest time pickers and binary search bounds).
+
+### Backtest
+
+`POST /api/backtest` with JSON body:
+
+```json
+{
+  "symbol": "002475",
+  "strategy": "macd_cross",
+  "startTs": 1704159000,
+  "endTs": 1704245400
+}
+```
+
+Response:
+
+```json
+{
+  "signals": [
+    { "barIndex": 1200, "tsSec": 1704180000, "side": "buy", "price": 10.52 }
+  ],
+  "summary": {
+    "initialCapital": 100000,
+    "finalEquity": 105230.5,
+    "totalReturnPct": 5.23,
+    "roundTrips": 12,
+    "winCount": 7,
+    "lossCount": 5,
+    "openPosition": false
+  }
+}
+```
+
+`summary` simulates long-only full-capital trades (100k initial); open lots at period end are marked to the last close. Strategies: `macd_cross` (DIF crosses above DEA → buy, below → sell).
 
 ## TCP protocol (K-line / indicators)
 

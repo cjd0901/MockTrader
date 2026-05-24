@@ -144,10 +144,13 @@ cmake --build build -j
 3. 拖动底部**时间轴**查看更早数据；接近已加载左边界时自动预取约 30 个交易日。
 4. **MACD**（DIF、DEA、柱）与 **KDJ** 由服务端计算；顶部读数颜色与图中折线/柱一致。
 5. 主图双击显示 OHLC；可见区间最高/最低价标注随滚动更新。
+6. 主图右侧 **量化回测** 面板：选择策略（如 MACD 金叉买 / 死叉卖）、在已加载数据的时间范围内设定起止时间并执行。服务端对 `.bin` 文件二分定位该区间并返回买卖点，主图以三角/方块标注。
 
 加载条数可在 `client/src/KlineLoadConfig.h` 调整（`VisibleBarCount`、`InitialBarLimit` 等）。
 
-## HTTP 接口（股票列表）
+## HTTP 接口
+
+### 股票列表
 
 `GET /api/stocks` → JSON：
 
@@ -158,6 +161,50 @@ cmake --build build -j
   ]
 }
 ```
+
+### K 线文件时间范围
+
+`GET /api/kline/range?symbol=002475` → JSON：
+
+```json
+{ "minTs": 1704159000, "maxTs": 1710000000, "totalBars": 12000 }
+```
+
+`minTs` / `maxTs` 由 `.bin` 文件首尾记录解析得到（回测时间选择与二分定位的边界）。
+
+### 量化回测
+
+`POST /api/backtest`，请求体示例：
+
+```json
+{
+  "symbol": "002475",
+  "strategy": "macd_cross",
+  "startTs": 1704159000,
+  "endTs": 1704245400
+}
+```
+
+响应示例：
+
+```json
+{
+  "signals": [
+    { "barIndex": 1200, "tsSec": 1704180000, "side": "buy", "price": 10.52 }
+  ],
+  "summary": {
+    "initialCapital": 100000,
+    "finalEquity": 105230.5,
+    "totalReturnPct": 5.23,
+    "roundTrips": 12,
+    "winCount": 7,
+    "lossCount": 5,
+    "openPosition": false
+  }
+}
+```
+
+`summary` 按做多、全仓买卖模拟（期初 10 万）；若期末仍持仓则按区间最后一根收盘价估算。策略：`macd_cross`（DIF 上穿 DEA 买入，下穿卖出）。
 
 ## TCP 协议（K 线 / 指标）
 
