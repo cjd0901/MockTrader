@@ -1,6 +1,6 @@
 #pragma once
 
-#include "KlineBinary.h"
+#include "model/MarketTypes.h"
 
 #include <QObject>
 #include <QUrl>

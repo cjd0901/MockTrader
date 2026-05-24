@@ -1,6 +1,6 @@
 #pragma once
 
-#include "net/KlineBinary.h"
+#include "model/MarketTypes.h"
 
 #include <QVector>
 #include <QWidget>

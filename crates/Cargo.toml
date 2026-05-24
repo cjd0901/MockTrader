@@ -2,7 +2,7 @@
 name = "mock-trader"
 version.workspace = true
 edition.workspace = true
-description = "MockTrader server: HTTP stock list + TCP kline streaming"
+description = "MockTrader server: Axum HTTP stock list + TCP kline streaming"
 
 [dependencies]
 anyhow = "1"

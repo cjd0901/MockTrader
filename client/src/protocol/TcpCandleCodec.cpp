@@ -1,4 +1,4 @@
-#include "KlineBinary.h"
+#include "protocol/TcpCandleCodec.h"
 
 #include <QDate>
 #include <QDateTime>
@@ -6,7 +6,6 @@
 #include <QTimeZone>
 #include <QtEndian>
 
-#include <cmath>
 #include <cstring>
 #include <optional>
 
@@ -40,7 +39,6 @@ qint64 candleUnixTs(qint32 date, qint32 time)
     const int y = date / 10000;
     const int m = (date / 100) % 100;
     const int d = date % 100;
-    // time 为 HHmmss，例如 93500 表示 09:35:00
     const int hh = time / 10000;
     const int mm = (time / 100) % 100;
     const int ss = time % 100;
@@ -57,12 +55,7 @@ qint64 candleUnixTs(qint32 date, qint32 time)
 
 } // namespace
 
-namespace KlineBinary {
-
-QByteArray encodeListStocksRequest()
-{
-    return encodeFrame(MsgReqListStocks, {});
-}
+namespace TcpCandle {
 
 QByteArray encodeGetCandlesRequest(const QString &symbol, std::optional<quint64> beforeIndex,
                                    quint32 limit)
@@ -158,4 +151,4 @@ QVector<IndicatorBar> decodeIndicators(const QByteArray &indicators, int barCoun
     return out;
 }
 
-} // namespace KlineBinary
+} // namespace TcpCandle

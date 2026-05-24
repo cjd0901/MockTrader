@@ -6,7 +6,8 @@ use anyhow::Context;
 use tokio::fs;
 
 use crate::indicators::{self, compute_from_ohlc};
-use crate::protocol::{StockEntry, KLINE_RECORD_SIZE};
+use crate::api::StockEntry;
+use crate::protocol::KLINE_RECORD_SIZE;
 
 pub use parse::ohlc_from_records;
 

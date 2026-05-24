@@ -1,4 +1,4 @@
-#include "AppStyle.h"
+#include "app/AppStyle.h"
 
 #include <QApplication>
 #include <QColor>

@@ -1,4 +1,4 @@
-#include "HttpStockClient.h"
+#include "api/HttpStockClient.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>

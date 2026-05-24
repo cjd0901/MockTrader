@@ -1,25 +1,25 @@
-#include "TcpTradingClient.h"
+#include "api/TcpCandleClient.h"
 
-#include "KlineBinary.h"
+#include "protocol/TcpCandleCodec.h"
 
 #include <QAbstractSocket>
 #include <QTcpSocket>
 
-TcpTradingClient::TcpTradingClient(QObject *parent)
+TcpCandleClient::TcpCandleClient(QObject *parent)
     : QObject(parent)
     , m_socket(new QTcpSocket(this))
 {
     connect(m_socket, &QTcpSocket::connected, this, [this] { emit connectedChanged(true); });
     connect(m_socket, &QTcpSocket::disconnected, this, [this] { emit connectedChanged(false); });
-    connect(m_socket, &QTcpSocket::readyRead, this, &TcpTradingClient::onReadyRead);
+    connect(m_socket, &QTcpSocket::readyRead, this, &TcpCandleClient::onReadyRead);
     connect(m_socket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
         emit connectionError(m_socket->errorString());
     });
 }
 
-TcpTradingClient::~TcpTradingClient() = default;
+TcpCandleClient::~TcpCandleClient() = default;
 
-void TcpTradingClient::connectToServer(const QHostAddress &host, quint16 port)
+void TcpCandleClient::connectToServer(const QHostAddress &host, quint16 port)
 {
     m_rxBuffer.clear();
     m_pendingCandleSymbol.clear();
@@ -27,22 +27,22 @@ void TcpTradingClient::connectToServer(const QHostAddress &host, quint16 port)
     m_socket->connectToHost(host, port);
 }
 
-void TcpTradingClient::requestCandles(const QString &symbol, std::optional<quint64> beforeIndex,
-                                      quint32 limit)
+void TcpCandleClient::requestCandles(const QString &symbol, std::optional<quint64> beforeIndex,
+                                       quint32 limit)
 {
     if (m_socket->state() != QAbstractSocket::ConnectedState) {
         return;
     }
     m_pendingCandleSymbol = symbol;
-    sendFrame(KlineBinary::encodeGetCandlesRequest(symbol, beforeIndex, limit));
+    sendFrame(TcpCandle::encodeGetCandlesRequest(symbol, beforeIndex, limit));
 }
 
-void TcpTradingClient::sendFrame(const QByteArray &frame)
+void TcpCandleClient::sendFrame(const QByteArray &frame)
 {
     m_socket->write(frame);
 }
 
-void TcpTradingClient::onReadyRead()
+void TcpCandleClient::onReadyRead()
 {
     m_rxBuffer.append(m_socket->readAll());
 
@@ -65,7 +65,7 @@ void TcpTradingClient::onReadyRead()
     }
 }
 
-void TcpTradingClient::handleFrame(const QByteArray &frame)
+void TcpCandleClient::handleFrame(const QByteArray &frame)
 {
     if (frame.size() < 5) {
         return;
@@ -76,7 +76,7 @@ void TcpTradingClient::handleFrame(const QByteArray &frame)
         | (static_cast<quint32>(frame[3]) << 16) | (static_cast<quint32>(frame[4]) << 24);
     const QByteArray payload = frame.mid(5, static_cast<int>(len));
 
-    if (msgType == KlineBinary::MsgRspError) {
+    if (msgType == TcpCandle::MsgRspError) {
         if (payload.size() < 2) {
             emit connectionError(tr("错误帧格式无效"));
             return;
@@ -88,7 +88,7 @@ void TcpTradingClient::handleFrame(const QByteArray &frame)
         return;
     }
 
-    if (msgType == KlineBinary::MsgRspCandleChunk) {
+    if (msgType == TcpCandle::MsgRspCandleChunk) {
         if (payload.size() < 16) {
             emit connectionError(tr("K线帧头过短"));
             return;
@@ -111,23 +111,23 @@ void TcpTradingClient::handleFrame(const QByteArray &frame)
             | (quint64(static_cast<uchar>(payload[15])) << 56);
 
         const QByteArray body = payload.mid(16);
-        const int barBytes = KlineBinary::RecordSize + KlineBinary::IndicatorValuesSize;
+        const int barBytes = TcpCandle::RecordSize + TcpCandle::IndicatorValuesSize;
         if (!body.isEmpty() && body.size() % barBytes != 0) {
             emit connectionError(tr("K线/指标数据长度无效"));
             return;
         }
         const int barCount = body.size() / barBytes;
-        const QByteArray records = body.left(barCount * KlineBinary::RecordSize);
-        const QByteArray indicatorBytes = body.mid(barCount * KlineBinary::RecordSize);
+        const QByteArray records = body.left(barCount * TcpCandle::RecordSize);
+        const QByteArray indicatorBytes = body.mid(barCount * TcpCandle::RecordSize);
 
-        const QVector<CandleBar> candles = KlineBinary::decodeRecords(records);
+        const QVector<CandleBar> candles = TcpCandle::decodeRecords(records);
         if (candles.isEmpty() && !records.isEmpty()) {
             emit connectionError(tr("K线解码失败"));
             return;
         }
 
         const QVector<IndicatorBar> indicators =
-            KlineBinary::decodeIndicators(indicatorBytes, barCount);
+            TcpCandle::decodeIndicators(indicatorBytes, barCount);
         if (indicators.size() != candles.size()) {
             emit connectionError(tr("指标解码失败"));
             return;

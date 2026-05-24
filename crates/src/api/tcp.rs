@@ -3,7 +3,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::warn;
 
 use crate::protocol::{decode_request, encode_response, ClientRequest, ServerMessage};
-use crate::state::AppState;
+
+use super::AppState;
 
 const MAX_FRAME: usize = 16 * 1024 * 1024 + 5;
 
@@ -41,9 +42,6 @@ async fn handle_connection(mut stream: TcpStream, state: AppState) -> anyhow::Re
         };
 
         let resp = match req {
-            ClientRequest::ListStocks => ServerMessage::Error(
-                "ListStocks moved to HTTP GET /api/stocks".into(),
-            ),
             ClientRequest::GetCandles {
                 symbol,
                 before_index,

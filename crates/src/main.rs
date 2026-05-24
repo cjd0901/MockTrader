@@ -1,10 +1,8 @@
+mod api;
 mod config;
-mod http;
 mod indicators;
 mod kline;
 mod protocol;
-mod state;
-mod tcp;
 
 use std::sync::Arc;
 
@@ -21,13 +19,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cfg = config::Config::from_env()?;
     let kline = Arc::new(kline::KlineStore::new(cfg.kline_dir.clone()));
-    let state = state::AppState { kline };
+    let state = api::AppState { kline };
 
-    let http_listener = http::bind(cfg.http_listen).await?;
+    let http_listener = api::bind_http(cfg.http_listen).await?;
     let http_state = state.clone();
     let http_addr = cfg.http_listen;
     tokio::spawn(async move {
-        if let Err(e) = http::run(http_listener, http_state).await {
+        if let Err(e) = api::run_http(http_listener, http_state).await {
             tracing::error!("http server exited: {e:#}");
         }
     });
@@ -39,6 +37,6 @@ async fn main() -> anyhow::Result<()> {
         http_addr,
         cfg.kline_dir.display()
     );
-    tcp::run_listener(tcp_listener, state).await?;
+    api::run_tcp(tcp_listener, state).await?;
     Ok(())
 }

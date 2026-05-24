@@ -1,5 +1,5 @@
-pub mod binary;
+pub mod candle;
 
-pub use binary::{
-    decode_request, encode_response, ClientRequest, KLINE_RECORD_SIZE, ServerMessage, StockEntry,
+pub use candle::{
+    decode_request, encode_response, ClientRequest, ServerMessage, KLINE_RECORD_SIZE,
 };

@@ -1,5 +1,5 @@
-#include "AppBranding.h"
-#include "AppStyle.h"
+#include "app/AppBranding.h"
+#include "app/AppStyle.h"
 #include "MainWindow.h"
 
 #include <QApplication>

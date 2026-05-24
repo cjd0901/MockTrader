@@ -43,14 +43,21 @@ The stack is a **Rust TCP server** (data + indicators + future simulation engine
 
 ```
 MockTrader/
-├── Cargo.toml              # Rust workspace
-├── crates/                 # mock-trader server (TCP, kline, indicators, …)
-├── client/                 # Qt 6 desktop client
+├── Cargo.toml
+├── crates/src/api/         # server HTTP + TCP + API models
+├── client/src/
+│   ├── app/                # theme, branding, load config
+│   ├── model/              # shared market types
+│   ├── protocol/           # TCP candle codec
+│   ├── api/                # HTTP stock list + TCP candles
+│   ├── pages/              # home & detail UI
+│   └── widgets/
 ├── docs/
-│   └── logo.png
+│   ├── logo.png
+│   └── ARCHITECTURE.md
 └── data/
-    ├── scripts/get_5min.py # Download & build .bin from baostock
-    └── kline/5min/         # Historical bars (*.bin, gitignored by default)
+    ├── scripts/get_5min.py
+    └── kline/5min/
 ```
 
 ```mermaid
@@ -162,13 +169,11 @@ Frame: `[u8 type][u32 LE payload length][payload]`
 | `CandleChunk` | 102 | S→C | `start_index`, `total`, raw K-line bytes, indicator bytes |
 | `Error` | 255 | S→C | Error text |
 
-> Legacy `ListStocks` (type 1) on TCP returns an error; use HTTP instead.
-
 Each bar: **32-byte candle** + **24-byte indicators** (6× `i32` LE, value = round(indicator×100); `i32::MIN` = invalid: `macd_dif`, `macd_dea`, `macd_bar`, `kdj_k`, `kdj_d`, `kdj_j`).
 
 `GetCandles` without `before_index` returns the latest `limit` records at the end of the file.
 
-Details: `crates/src/protocol/binary.rs`.
+Details: `docs/ARCHITECTURE.md`, `crates/src/protocol/candle.rs`.
 
 ## Development
 

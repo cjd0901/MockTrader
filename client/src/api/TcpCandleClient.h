@@ -1,6 +1,6 @@
 #pragma once
 
-#include "KlineBinary.h"
+#include "model/MarketTypes.h"
 
 #include <QHostAddress>
 #include <QObject>
@@ -9,13 +9,13 @@
 
 class QTcpSocket;
 
-class TcpTradingClient final : public QObject
+class TcpCandleClient final : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit TcpTradingClient(QObject *parent = nullptr);
-    ~TcpTradingClient() override;
+    explicit TcpCandleClient(QObject *parent = nullptr);
+    ~TcpCandleClient() override;
 
     void connectToServer(const QHostAddress &host, quint16 port);
     void requestCandles(const QString &symbol, std::optional<quint64> beforeIndex, quint32 limit);

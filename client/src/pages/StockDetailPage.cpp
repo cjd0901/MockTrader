@@ -1,6 +1,6 @@
 #include "StockDetailPage.h"
 
-#include "KlineLoadConfig.h"
+#include "app/KlineLoadConfig.h"
 #include "widgets/KlineTimelineBar.h"
 
 #include <QtCharts/QCandlestickSet>

@@ -13,14 +13,29 @@ qt_standard_project_setup()
 
 add_executable(mock_trader_client
     resources/resources.qrc
-    src/KlineLoadConfig.h
-    src/AppBranding.cpp
-    src/AppBranding.h
-    src/AppStyle.cpp
-    src/AppStyle.h
+
+    # app shell
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
+
+    # application config & theme
+    src/app/KlineLoadConfig.h
+    src/app/AppBranding.cpp
+    src/app/AppBranding.h
+    src/app/AppStyle.cpp
+    src/app/AppStyle.h
+
+    # domain & wire protocols
+    src/model/MarketTypes.h
+    src/protocol/TcpCandleCodec.cpp
+    src/protocol/TcpCandleCodec.h
+    src/api/HttpStockClient.cpp
+    src/api/HttpStockClient.h
+    src/api/TcpCandleClient.cpp
+    src/api/TcpCandleClient.h
+
+    # UI
     src/pages/HomePage.cpp
     src/pages/HomePage.h
     src/pages/StockDetailPage.cpp
@@ -29,12 +44,6 @@ add_executable(mock_trader_client
     src/widgets/KlineTimelineBar.h
     src/widgets/StockListDelegate.cpp
     src/widgets/StockListDelegate.h
-    src/net/HttpStockClient.cpp
-    src/net/HttpStockClient.h
-    src/net/TcpTradingClient.cpp
-    src/net/TcpTradingClient.h
-    src/net/KlineBinary.cpp
-    src/net/KlineBinary.h
 )
 
 target_link_libraries(mock_trader_client PRIVATE

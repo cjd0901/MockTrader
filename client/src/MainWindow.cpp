@@ -1,9 +1,9 @@
 #include "MainWindow.h"
 
-#include "AppBranding.h"
-#include "KlineLoadConfig.h"
-#include "net/HttpStockClient.h"
-#include "net/TcpTradingClient.h"
+#include "app/AppBranding.h"
+#include "app/KlineLoadConfig.h"
+#include "api/HttpStockClient.h"
+#include "api/TcpCandleClient.h"
 #include "pages/HomePage.h"
 #include "pages/StockDetailPage.h"
 
@@ -60,7 +60,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_home(new HomePage())
     , m_detail(new StockDetailPage())
     , m_http(new HttpStockClient(this))
-    , m_tcp(new TcpTradingClient(this))
+    , m_tcp(new TcpCandleClient(this))
     , m_host(defaultHost())
     , m_tcpPort(defaultTcpPort())
     , m_httpPort(defaultHttpPort())
@@ -93,7 +93,7 @@ void MainWindow::wireConnections()
         statusBar()->showMessage(tr("股票列表 HTTP 错误: %1").arg(msg), 8000);
     });
 
-    connect(m_tcp, &TcpTradingClient::connectedChanged, this, [this](bool on) {
+    connect(m_tcp, &TcpCandleClient::connectedChanged, this, [this](bool on) {
         if (on) {
             statusBar()->showMessage(
                 tr("HTTP %1:%2 · TCP 已连接 %3:%4")
@@ -112,7 +112,7 @@ void MainWindow::wireConnections()
         }
     });
 
-    connect(m_tcp, &TcpTradingClient::connectionError, this, [this](const QString &msg) {
+    connect(m_tcp, &TcpCandleClient::connectionError, this, [this](const QString &msg) {
         statusBar()->showMessage(tr("TCP 错误: %1").arg(msg), 8000);
     });
 
@@ -131,7 +131,7 @@ void MainWindow::wireConnections()
                 m_tcp->requestCandles(symbol, beforeIndex, KlineLoadConfig::PrefetchBarLimit);
             });
 
-    connect(m_tcp, &TcpTradingClient::candlesReceived, m_detail, &StockDetailPage::mergeCandles);
+    connect(m_tcp, &TcpCandleClient::candlesReceived, m_detail, &StockDetailPage::mergeCandles);
 }
 
 void MainWindow::fetchStockList()

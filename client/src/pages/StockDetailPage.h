@@ -1,6 +1,6 @@
 #pragma once
 
-#include "net/KlineBinary.h"
+#include "model/MarketTypes.h"
 
 #include <QtCharts/QBarSeries>
 #include <QtCharts/QBarSet>

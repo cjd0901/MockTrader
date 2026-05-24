@@ -43,14 +43,21 @@ MockTrader 是一款**本地优先**的量化历史回测软件，面向 A 股�
 
 ```
 MockTrader/
-├── Cargo.toml              # Rust workspace
-├── crates/                 # mock-trader 服务端
-├── client/                 # Qt 6 客户端
+├── Cargo.toml
+├── crates/src/api/         # 服务端 HTTP + TCP + API 模型
+├── client/src/
+│   ├── app/                # 主题、品牌、加载配置
+│   ├── model/              # 行情数据结构
+│   ├── protocol/           # TCP K 线编解码
+│   ├── api/                # HTTP 列表 + TCP K 线
+│   ├── pages/              # 首页与详情
+│   └── widgets/
 ├── docs/
-│   └── logo.png
+│   ├── logo.png
+│   └── ARCHITECTURE.md
 └── data/
-    ├── scripts/get_5min.py # 从 baostock 生成 .bin
-    └── kline/5min/         # K 线数据（*.bin，默认不入库）
+    ├── scripts/get_5min.py
+    └── kline/5min/
 ```
 
 ```mermaid
@@ -162,13 +169,11 @@ cmake --build build -j
 | CandleChunk | 102 | S→C | `start_index`、`total`、原始 K 线、指标字节 |
 | Error | 255 | S→C | 错误文本 |
 
-> TCP 上的旧版 `ListStocks`（类型 1）会返回错误，请改用 HTTP。
-
 每根 K 线：**32 字节行情** + **24 字节指标**（6×i32 LE，值为 round(指标×100)；`i32::MIN` 表示无效：`macd_dif`、`macd_dea`、`macd_bar`、`kdj_k`、`kdj_d`、`kdj_j`）。
 
 `GetCandles` 未带 `before_index` 时返回文件末尾（最新）的 `limit` 条记录。
 
-协议细节见 `crates/src/protocol/binary.rs`。
+详见 `docs/ARCHITECTURE.md`、`crates/src/protocol/candle.rs`。
 
 ## 开发说明
 
