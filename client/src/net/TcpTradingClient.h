@@ -18,13 +18,11 @@ public:
     ~TcpTradingClient() override;
 
     void connectToServer(const QHostAddress &host, quint16 port);
-    void requestListStocks();
     void requestCandles(const QString &symbol, std::optional<quint64> beforeIndex, quint32 limit);
 
 signals:
     void connectedChanged(bool connected);
     void connectionError(const QString &message);
-    void stockListReceived(const QVector<StockRow> &stocks);
     void candlesReceived(const QString &symbol, quint64 startIndex, quint64 total,
                          const QVector<CandleBar> &candles,
                          const QVector<IndicatorBar> &indicators);

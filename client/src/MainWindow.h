@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QStackedWidget>
 
+class HttpStockClient;
 class TcpTradingClient;
 class HomePage;
 class StockDetailPage;
@@ -18,11 +19,14 @@ public:
 private:
     void wireConnections();
     void connectIfNeeded();
+    void fetchStockList();
 
     QStackedWidget *m_stack = nullptr;
     HomePage *m_home = nullptr;
     StockDetailPage *m_detail = nullptr;
+    HttpStockClient *m_http = nullptr;
     TcpTradingClient *m_tcp = nullptr;
     QHostAddress m_host;
-    quint16 m_port = 9000;
+    quint16 m_tcpPort = 9000;
+    quint16 m_httpPort = 9080;
 };

@@ -29,6 +29,8 @@ add_executable(mock_trader_client
     src/widgets/KlineTimelineBar.h
     src/widgets/StockListDelegate.cpp
     src/widgets/StockListDelegate.h
+    src/net/HttpStockClient.cpp
+    src/net/HttpStockClient.h
     src/net/TcpTradingClient.cpp
     src/net/TcpTradingClient.h
     src/net/KlineBinary.cpp

@@ -2,10 +2,13 @@
 name = "mock-trader"
 version.workspace = true
 edition.workspace = true
-description = "TCP API serving 5-minute kline binaries for MockTrader"
+description = "MockTrader server: HTTP stock list + TCP kline streaming"
 
 [dependencies]
 anyhow = "1"
+axum = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -5,12 +5,10 @@ pub const KLINE_RECORD_SIZE: usize = 32;
 pub const MSG_REQ_LIST_STOCKS: u8 = 1;
 pub const MSG_REQ_GET_CANDLES: u8 = 2;
 
-pub const MSG_RSP_STOCK_LIST: u8 = 101;
 pub const MSG_RSP_CANDLE_CHUNK: u8 = 102;
 pub const MSG_RSP_ERROR: u8 = 255;
 
 const MAX_SYMBOL_LEN: usize = 32;
-const MAX_NAME_LEN: usize = 128;
 const MAX_ERROR_LEN: usize = 4096;
 const MAX_FRAME_PAYLOAD: usize = 16 * 1024 * 1024;
 
@@ -32,7 +30,6 @@ pub enum ClientRequest {
 
 #[derive(Debug)]
 pub enum ServerMessage {
-    StockList(Vec<StockEntry>),
     CandleChunk {
         start_index: u64,
         total: u64,
@@ -132,22 +129,6 @@ pub fn encode_request(req: &ClientRequest) -> Vec<u8> {
 
 pub fn encode_response(msg: &ServerMessage) -> Vec<u8> {
     match msg {
-        ServerMessage::StockList(stocks) => {
-            let mut payload = Vec::new();
-            let count: u16 = stocks.len().try_into().unwrap_or(u16::MAX);
-            payload.extend_from_slice(&count.to_le_bytes());
-            for s in stocks {
-                let sym = s.symbol.as_bytes();
-                let name = s.display_name.as_bytes();
-                let sym_len = sym.len().min(MAX_SYMBOL_LEN) as u8;
-                let name_len: u16 = name.len().min(MAX_NAME_LEN).try_into().unwrap_or(u16::MAX);
-                payload.push(sym_len);
-                payload.extend_from_slice(&sym[..sym_len as usize]);
-                payload.extend_from_slice(&name_len.to_le_bytes());
-                payload.extend_from_slice(&name[..name_len as usize]);
-            }
-            encode_frame(MSG_RSP_STOCK_LIST, &payload)
-        }
         ServerMessage::CandleChunk {
             start_index,
             total,

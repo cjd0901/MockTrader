@@ -65,6 +65,7 @@ flowchart LR
     SIM[Order simulator - planned]
   end
   BIN[(.bin files)]
+  UI -->|HTTP JSON| IO
   UI -->|TCP binary| IO
   IO --> BIN
   IND --> IO
@@ -103,11 +104,13 @@ From the repository root:
 cargo run -p mock-trader
 ```
 
-| Variable | Default |
-|----------|---------|
-| `TRADING_HOST` | `0.0.0.0` |
-| `TRADING_PORT` | `9000` |
-| `KLINE_DIR` | `data/kline/5min` |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TRADING_HOST` | `0.0.0.0` | TCP bind (K-line / indicators) |
+| `TRADING_PORT` | `9000` | TCP port |
+| `TRADING_HTTP_HOST` | `0.0.0.0` | HTTP bind (stock list) |
+| `TRADING_HTTP_PORT` | `9080` | HTTP port |
+| `KLINE_DIR` | `data/kline/5min` | K-line `.bin` directory |
 
 ## Build & run the client
 
@@ -120,32 +123,46 @@ cmake --build build -j
 ./build/mock_trader_client
 ```
 
-| Variable | Default |
-|----------|---------|
-| `TRADING_TCP_HOST` | `127.0.0.1` |
-| `TRADING_TCP_PORT` | `9000` |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TRADING_HTTP_HOST` | `127.0.0.1` | HTTP stock list |
+| `TRADING_HTTP_PORT` | `9080` | HTTP port |
+| `TRADING_TCP_HOST` | `127.0.0.1` | TCP K-line stream |
+| `TRADING_TCP_PORT` | `9000` | TCP port |
 
 ## Client workflow (current)
 
-1. Start the server, then launch the client. The home screen lists all `.bin` symbols under `KLINE_DIR`.
-2. Open a symbol to load recent 5-minute history (~180 trading days in memory) and show the **latest 100 bars** by default.
+1. Start the server, then launch the client. The home screen loads the stock list via **HTTP** (`GET /api/stocks`).
+2. Open a symbol to load recent 5-minute history over **TCP** (~180 trading days in memory) and show the **latest 100 bars** by default.
 3. Drag the **timeline** at the bottom to scroll; older bars are prefetched near the left edge.
 4. View **MACD** (DIF, DEA, histogram) and **KDJ** computed on the server; colored readouts match chart lines.
 5. Double-click the main chart for OHLC detail; high/low labels track the visible window.
 
 Tune bar counts in `client/src/KlineLoadConfig.h` (`VisibleBarCount`, `InitialBarLimit`, etc.).
 
-## TCP protocol (binary frames)
+## HTTP API (stock list)
+
+`GET /api/stocks` → JSON:
+
+```json
+{
+  "stocks": [
+    { "symbol": "002475", "displayName": "立讯精密" }
+  ]
+}
+```
+
+## TCP protocol (K-line / indicators)
 
 Frame: `[u8 type][u32 LE payload length][payload]`
 
 | Type | Value | Direction | Description |
 |------|-------|-----------|-------------|
-| `ListStocks` | 1 | C→S | Empty payload |
 | `GetCandles` | 2 | C→S | `symbol` + optional `before_index` + `limit` |
-| `StockList` | 101 | S→C | UTF-8 stock list |
 | `CandleChunk` | 102 | S→C | `start_index`, `total`, raw K-line bytes, indicator bytes |
 | `Error` | 255 | S→C | Error text |
+
+> Legacy `ListStocks` (type 1) on TCP returns an error; use HTTP instead.
 
 Each bar: **32-byte candle** + **24-byte indicators** (6× `i32` LE, value = round(indicator×100); `i32::MIN` = invalid: `macd_dif`, `macd_dea`, `macd_bar`, `kdj_k`, `kdj_d`, `kdj_j`).
 

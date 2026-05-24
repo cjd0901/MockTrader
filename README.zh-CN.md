@@ -65,6 +65,7 @@ flowchart LR
     SIM[下单仿真 - 规划中]
   end
   BIN[(.bin 文件)]
+  UI -->|HTTP JSON| IO
   UI -->|TCP 二进制| IO
   IO --> BIN
   IND --> IO
@@ -103,11 +104,13 @@ python data/scripts/get_5min.py
 cargo run -p mock-trader
 ```
 
-| 环境变量 | 默认值 |
-|----------|--------|
-| `TRADING_HOST` | `0.0.0.0` |
-| `TRADING_PORT` | `9000` |
-| `KLINE_DIR` | `data/kline/5min` |
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `TRADING_HOST` | `0.0.0.0` | TCP 监听（K 线/指标） |
+| `TRADING_PORT` | `9000` | TCP 端口 |
+| `TRADING_HTTP_HOST` | `0.0.0.0` | HTTP 监听（股票列表） |
+| `TRADING_HTTP_PORT` | `9080` | HTTP 端口 |
+| `KLINE_DIR` | `data/kline/5min` | K 线目录 |
 
 ## 构建并运行客户端
 
@@ -120,32 +123,46 @@ cmake --build build -j
 ./build/mock_trader_client
 ```
 
-| 环境变量 | 默认值 |
-|----------|--------|
-| `TRADING_TCP_HOST` | `127.0.0.1` |
-| `TRADING_TCP_PORT` | `9000` |
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `TRADING_HTTP_HOST` | `127.0.0.1` | HTTP 股票列表 |
+| `TRADING_HTTP_PORT` | `9080` | HTTP 端口 |
+| `TRADING_TCP_HOST` | `127.0.0.1` | TCP K 线 |
+| `TRADING_TCP_PORT` | `9000` | TCP 端口 |
 
 ## 客户端使用（当前版本）
 
-1. 启动服务端后打开客户端，首页列出 `KLINE_DIR` 下所有 `.bin` 股票。
-2. 进入详情后加载最近约 **180 个交易日** 的 5 分钟线，默认显示**最新 100 根** K 线。
+1. 启动服务端后打开客户端，首页通过 **HTTP**（`GET /api/stocks`）加载股票列表。
+2. 进入详情后通过 **TCP** 加载最近约 **180 个交易日** 的 5 分钟线，默认显示**最新 100 根** K 线。
 3. 拖动底部**时间轴**查看更早数据；接近已加载左边界时自动预取约 30 个交易日。
 4. **MACD**（DIF、DEA、柱）与 **KDJ** 由服务端计算；顶部读数颜色与图中折线/柱一致。
 5. 主图双击显示 OHLC；可见区间最高/最低价标注随滚动更新。
 
 加载条数可在 `client/src/KlineLoadConfig.h` 调整（`VisibleBarCount`、`InitialBarLimit` 等）。
 
-## TCP 协议（二进制帧）
+## HTTP 接口（股票列表）
+
+`GET /api/stocks` → JSON：
+
+```json
+{
+  "stocks": [
+    { "symbol": "002475", "displayName": "立讯精密" }
+  ]
+}
+```
+
+## TCP 协议（K 线 / 指标）
 
 帧结构：`[u8 消息类型][u32 小端 payload 长度][payload]`
 
 | 类型 | 值 | 方向 | 说明 |
 |------|-----|------|------|
-| ListStocks | 1 | C→S | 无 payload |
 | GetCandles | 2 | C→S | symbol + 可选 `before_index` + `limit` |
-| StockList | 101 | S→C | 股票列表 UTF-8 |
 | CandleChunk | 102 | S→C | `start_index`、`total`、原始 K 线、指标字节 |
 | Error | 255 | S→C | 错误文本 |
+
+> TCP 上的旧版 `ListStocks`（类型 1）会返回错误，请改用 HTTP。
 
 每根 K 线：**32 字节行情** + **24 字节指标**（6×i32 LE，值为 round(指标×100)；`i32::MIN` 表示无效：`macd_dif`、`macd_dea`、`macd_bar`、`kdj_k`、`kdj_d`、`kdj_j`）。
 

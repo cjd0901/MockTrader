@@ -27,14 +27,6 @@ void TcpTradingClient::connectToServer(const QHostAddress &host, quint16 port)
     m_socket->connectToHost(host, port);
 }
 
-void TcpTradingClient::requestListStocks()
-{
-    if (m_socket->state() != QAbstractSocket::ConnectedState) {
-        return;
-    }
-    sendFrame(KlineBinary::encodeListStocksRequest());
-}
-
 void TcpTradingClient::requestCandles(const QString &symbol, std::optional<quint64> beforeIndex,
                                       quint32 limit)
 {
@@ -93,50 +85,6 @@ void TcpTradingClient::handleFrame(const QByteArray &frame)
             | (quint16(static_cast<uchar>(payload[1])) << 8);
         const QString msg = QString::fromUtf8(payload.mid(2, textLen));
         emit connectionError(msg);
-        return;
-    }
-
-    if (msgType == KlineBinary::MsgRspStockList) {
-        if (payload.size() < 2) {
-            emit connectionError(tr("股票列表帧过短"));
-            return;
-        }
-        const quint16 count = quint16(static_cast<uchar>(payload[0]))
-            | (quint16(static_cast<uchar>(payload[1])) << 8);
-
-        QVector<StockRow> rows;
-        rows.reserve(count);
-        int off = 2;
-        for (quint16 i = 0; i < count; ++i) {
-            if (off >= payload.size()) {
-                emit connectionError(tr("股票列表数据截断"));
-                return;
-            }
-            const int symLen = static_cast<uchar>(payload[off]);
-            off += 1;
-            if (off + symLen > payload.size()) {
-                emit connectionError(tr("股票代码截断"));
-                return;
-            }
-            StockRow row;
-            row.symbol = QString::fromUtf8(payload.mid(off, symLen));
-            off += symLen;
-            if (off + 2 > payload.size()) {
-                emit connectionError(tr("股票名称长度截断"));
-                return;
-            }
-            const quint16 nameLen = quint16(static_cast<uchar>(payload[off]))
-                | (quint16(static_cast<uchar>(payload[off + 1])) << 8);
-            off += 2;
-            if (off + nameLen > payload.size()) {
-                emit connectionError(tr("股票名称截断"));
-                return;
-            }
-            row.displayName = QString::fromUtf8(payload.mid(off, nameLen));
-            off += nameLen;
-            rows.push_back(std::move(row));
-        }
-        emit stockListReceived(rows);
         return;
     }
 
