@@ -4,7 +4,9 @@
 
 #include <QWidget>
 
+class QFrame;
 class QLineEdit;
+class QStackedWidget;
 class StrategyPicker;
 class QLabel;
 class QPushButton;
@@ -36,15 +38,30 @@ private:
     void clampTimeInputs();
     void setTimeEditText(QLineEdit *edit, qint64 tsSec);
     qint64 parseTimeEdit(const QLineEdit *edit, bool *ok) const;
+    void showPnlCard(bool show);
+    void setPnlPlaceholder(const QString &text);
+
+    QLabel *makeFieldLabel(const QString &text, QWidget *parent);
+    QLabel *makeMetricValue(const QString &objectName, QWidget *parent);
+    QWidget *makeMetricRow(const QString &caption, QLabel *valueLabel, QWidget *parent);
 
     StrategyPicker *m_strategy = nullptr;
     QLineEdit *m_startTime = nullptr;
     QLineEdit *m_endTime = nullptr;
     QLabel *m_rangeHint = nullptr;
-    QLabel *m_pnlTitle = nullptr;
-    QLabel *m_pnlLabel = nullptr;
-    QLabel *m_resultLabel = nullptr;
+    QLabel *m_statusLabel = nullptr;
     QPushButton *m_runButton = nullptr;
+
+    QFrame *m_pnlCard = nullptr;
+    QStackedWidget *m_pnlStack = nullptr;
+    QWidget *m_metricsContainer = nullptr;
+    QLabel *m_pnlPlaceholder = nullptr;
+    QLabel *m_returnValue = nullptr;
+    QLabel *m_initialCapitalValue = nullptr;
+    QLabel *m_finalEquityValue = nullptr;
+    QLabel *m_tradesValue = nullptr;
+    QLabel *m_openPositionNote = nullptr;
+    QLabel *m_signalSummary = nullptr;
 
     qint64 m_minTs = 0;
     qint64 m_maxTs = 0;

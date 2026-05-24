@@ -553,7 +553,7 @@ StockDetailPage::StockDetailPage(QWidget *parent)
     auto *mainRow = new QHBoxLayout();
     mainRow->setSpacing(12);
     mainRow->addWidget(m_chartPanel, 1);
-    mainRow->addWidget(m_backtestPanel, 0, Qt::AlignTop);
+    mainRow->addWidget(m_backtestPanel, 0);
 
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(24, 20, 24, 20);
