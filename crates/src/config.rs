@@ -6,6 +6,7 @@ pub struct Config {
     pub tcp_listen: SocketAddr,
     pub http_listen: SocketAddr,
     pub kline_dir: PathBuf,
+    pub strategies_file: PathBuf,
 }
 
 impl Config {
@@ -33,10 +34,15 @@ impl Config {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("data/kline/5min"));
 
+        let strategies_file = std::env::var("STRATEGIES_FILE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("data/strategies.toml"));
+
         Ok(Self {
             tcp_listen,
             http_listen,
             kline_dir,
+            strategies_file,
         })
     }
 }

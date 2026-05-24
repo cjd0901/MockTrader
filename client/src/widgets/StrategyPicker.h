@@ -1,7 +1,10 @@
 #pragma once
 
+#include "model/MarketTypes.h"
+
 #include <QFrame>
 #include <QString>
+#include <QVector>
 
 class QLabel;
 class QMenu;
@@ -17,6 +20,8 @@ public:
     explicit StrategyPicker(QWidget *parent = nullptr);
 
     QString currentStrategyId() const { return m_currentId; }
+
+    void setStrategies(const QVector<StrategyRow> &strategies);
 
 public slots:
     void setCurrentStrategy(const QString &strategyId);
@@ -35,5 +40,6 @@ private:
     QLabel *m_label = nullptr;
     QLabel *m_chevron = nullptr;
     QMenu *m_menu = nullptr;
+    QVector<StrategyRow> m_strategies;
     QString m_currentId;
 };

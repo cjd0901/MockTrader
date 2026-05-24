@@ -6,7 +6,7 @@ MockTrader is split into a **Rust server** and a **Qt 6 desktop client**. Market
 
 | Transport | Port (default) | Purpose |
 |-----------|----------------|---------|
-| HTTP (Axum) | 9080 | Stock list, K-line file time range, backtest |
+| HTTP (Axum) | 9080 | Stock list, strategy list, K-line file time range, backtest |
 | TCP (binary frames) | 9000 | K-line + indicator chunks (`GetCandles`) |
 
 ## Server (`crates/`)
@@ -18,12 +18,12 @@ src/
   api/             # client-facing transports
     mod.rs         # AppState
     model.rs       # JSON request/response types
-    http.rs        # GET /api/stocks, /api/kline/range; POST /api/backtest
+    http.rs        # GET /api/stocks, /api/strategies, /api/kline/range; POST /api/backtest
     tcp.rs         # per-connection TCP handler
   kline/           # .bin I/O, binary search, backtest window
     parse.rs       # OHLC + unix timestamp from records
     range.rs       # file min/max ts, index by timestamp
-  strategy/        # MACD cross signals + PnL summary
+  strategy/        # Strategy trait, TOML catalog, registry, MACD cross, PnL
   indicators/      # MACD/KDJ → i32×100 wire values
   protocol/
     candle.rs      # TCP framing & GetCandles codec
@@ -46,7 +46,10 @@ MainWindow.cpp # wires HTTP list/range/backtest + TCP candles
 ```
 
 - **Home:** `GET /api/stocks`.
+- **Startup:** `GET /api/strategies` → backtest strategy picker.
 - **Detail:** TCP candles; `GET /api/kline/range` for backtest time bounds; `POST /api/backtest` for signals/PnL overlay.
+
+Strategy metadata lives in `data/strategies.toml` (`STRATEGIES_FILE`); only `enabled` entries with a matching `Strategy` implementation are exposed and runnable.
 
 ## On-disk K-line format
 

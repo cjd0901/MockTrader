@@ -75,6 +75,68 @@ void HttpStockClient::fetchStockList(const QUrl &baseUrl)
     });
 }
 
+void HttpStockClient::fetchStrategyList(const QUrl &baseUrl)
+{
+    const QUrl endpoint = HttpApiUrl::resolve(baseUrl, QStringLiteral("/api/strategies"));
+    if (!endpoint.isValid()) {
+        emit fetchError(tr("无效的 HTTP 地址"));
+        return;
+    }
+
+    QNetworkRequest req(endpoint);
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("MockTraderClient/1.0"));
+
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit fetchError(reply->errorString());
+            return;
+        }
+
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            emit fetchError(tr("策略列表 JSON 解析失败: %1").arg(parseError.errorString()));
+            return;
+        }
+
+        const QJsonObject root = doc.object();
+        const QJsonValue strategiesValue = root.value(QStringLiteral("strategies"));
+        if (!strategiesValue.isArray()) {
+            emit fetchError(tr("响应缺少 strategies 数组"));
+            return;
+        }
+
+        const QJsonArray strategies = strategiesValue.toArray();
+        QVector<StrategyRow> rows;
+        rows.reserve(strategies.size());
+
+        for (const QJsonValue &item : strategies) {
+            if (!item.isObject()) {
+                continue;
+            }
+            const QJsonObject obj = item.toObject();
+            const QString id = obj.value(QStringLiteral("id")).toString();
+            const QString displayName = obj.value(QStringLiteral("displayName")).toString();
+            if (id.isEmpty()) {
+                continue;
+            }
+            StrategyRow row;
+            row.id = id;
+            row.displayName = displayName.isEmpty() ? id : displayName;
+            rows.push_back(std::move(row));
+        }
+
+        if (rows.isEmpty()) {
+            emit fetchError(tr("策略列表为空"));
+            return;
+        }
+
+        emit strategyListReceived(rows);
+    });
+}
+
 void HttpStockClient::fetchKlineRange(const QUrl &baseUrl, const QString &symbol)
 {
     if (symbol.isEmpty()) {

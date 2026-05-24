@@ -9,11 +9,11 @@ use axum::{
 use tokio::net::TcpListener;
 use tracing::info;
 
-use crate::strategy::{SignalSide, StrategyKind};
+use crate::strategy::SignalSide;
 
 use super::model::{
     BacktestRequest, BacktestResponse, BacktestSignalJson, BacktestSummaryJson, KlineRangeResponse,
-    StockListResponse,
+    StockListResponse, StrategyEntryJson, StrategyListResponse,
 };
 use super::AppState;
 
@@ -24,6 +24,7 @@ pub async fn bind(addr: SocketAddr) -> anyhow::Result<TcpListener> {
 pub async fn run(listener: TcpListener, state: AppState) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/api/stocks", get(list_stocks))
+        .route("/api/strategies", get(list_strategies))
         .route("/api/kline/range", get(kline_range))
         .route("/api/backtest", post(run_backtest))
         .with_state(state);
@@ -50,6 +51,21 @@ struct KlineRangeQuery {
     symbol: String,
 }
 
+async fn list_strategies(
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> Json<StrategyListResponse> {
+    let strategies = state
+        .strategies
+        .list()
+        .iter()
+        .map(|s| StrategyEntryJson {
+            id: s.id.clone(),
+            display_name: s.display_name.clone(),
+        })
+        .collect();
+    Json(StrategyListResponse { strategies })
+}
+
 async fn kline_range(
     axum::extract::State(state): axum::extract::State<AppState>,
     Query(q): Query<KlineRangeQuery>,
@@ -71,16 +87,16 @@ async fn run_backtest(
     axum::extract::State(state): axum::extract::State<AppState>,
     Json(req): Json<BacktestRequest>,
 ) -> Result<Json<BacktestResponse>, (axum::http::StatusCode, String)> {
-    let strategy = StrategyKind::parse(&req.strategy).ok_or_else(|| {
-        (
+    if !state.strategies.is_allowed(&req.strategy) {
+        return Err((
             axum::http::StatusCode::BAD_REQUEST,
-            format!("unknown strategy: {}", req.strategy),
-        )
-    })?;
+            format!("unknown or disabled strategy: {}", req.strategy),
+        ));
+    }
 
     let result = state
         .kline
-        .run_backtest(&req.symbol, strategy, req.start_ts, req.end_ts)
+        .run_backtest(state.strategies.as_ref(), &req.symbol, &req.strategy, req.start_ts, req.end_ts)
         .await
         .map_err(internal)?;
 

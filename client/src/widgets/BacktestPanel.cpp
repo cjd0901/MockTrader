@@ -268,6 +268,11 @@ void BacktestPanel::applyDateTimeLimits()
     m_runButton->setEnabled(true);
 }
 
+void BacktestPanel::setStrategies(const QVector<StrategyRow> &strategies)
+{
+    m_strategy->setStrategies(strategies);
+}
+
 void BacktestPanel::setFileTimeRange(qint64 minTsSec, qint64 maxTsSec)
 {
     m_fileMinTs = minTsSec;

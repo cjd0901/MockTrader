@@ -106,8 +106,9 @@ impl KlineStore {
     /// Run backtest on `[start_ts, end_ts]` (unix seconds, inclusive) using binary search on the file.
     pub async fn run_backtest(
         &self,
+        catalog: &crate::strategy::StrategyCatalog,
         symbol: &str,
-        strategy: crate::strategy::StrategyKind,
+        strategy_id: &str,
         start_ts: i64,
         end_ts: i64,
     ) -> anyhow::Result<crate::strategy::BacktestResult> {
@@ -119,10 +120,7 @@ impl KlineStore {
         let meta = tokio::fs::metadata(&path).await?;
         let total = meta.len() / RECORD_SIZE;
         if total == 0 {
-            return Ok(crate::strategy::BacktestResult {
-                signals: Vec::new(),
-                summary: crate::strategy::BacktestSummary::empty(),
-            });
+            return Ok(crate::strategy::empty_backtest_result());
         }
 
         let (file_min_ts, file_max_ts) = file_unix_range(&path, total).await?;
@@ -132,10 +130,7 @@ impl KlineStore {
         let lo = find_first_index_ge(&path, total, start_ts).await?;
         let mut hi = find_last_index_le(&path, total, end_ts).await?;
         if lo > hi || lo >= total {
-            return Ok(crate::strategy::BacktestResult {
-                signals: Vec::new(),
-                summary: crate::strategy::BacktestSummary::empty(),
-            });
+            return Ok(crate::strategy::empty_backtest_result());
         }
         hi = hi.min(total - 1);
 
@@ -166,16 +161,13 @@ impl KlineStore {
             kdj_j: series.kdj_j[offset..offset + window_len].to_vec(),
         };
 
-        let signals = crate::strategy::run(
-            strategy,
-            lo,
-            &window_closes,
-            &window_ts,
-            &window_indicators,
-        );
-        let end_price = window_closes.last().copied();
-        let summary = crate::strategy::compute_pnl(&signals, end_price);
-        Ok(crate::strategy::BacktestResult { signals, summary })
+        let ctx = crate::strategy::StrategyContext {
+            start_index: lo,
+            closes: &window_closes,
+            ts_secs: &window_ts,
+            indicators: &window_indicators,
+        };
+        catalog.run_backtest(strategy_id, ctx)
     }
 
     async fn resolve_path(&self, symbol: &str) -> anyhow::Result<PathBuf> {

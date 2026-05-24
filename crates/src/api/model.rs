@@ -12,6 +12,18 @@ pub struct StockListResponse {
     pub stocks: Vec<StockEntry>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct StrategyEntryJson {
+    pub id: String,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StrategyListResponse {
+    pub strategies: Vec<StrategyEntryJson>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct BacktestRequest {
     pub symbol: String,

@@ -1,0 +1,6 @@
+# Quantitative strategies exposed to the client (must match a server implementation).
+
+[[strategy]]
+id = "macd_cross"
+name = "MACD金叉买入 / 死叉卖出"
+enabled = true

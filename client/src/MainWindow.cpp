@@ -49,8 +49,10 @@ MainWindow::MainWindow(QWidget *parent)
 void MainWindow::wireConnections()
 {
     connect(m_http, &HttpStockClient::stockListReceived, m_home, &HomePage::setStocks);
+    connect(m_http, &HttpStockClient::strategyListReceived, m_detail,
+            &StockDetailPage::setBacktestStrategies);
     connect(m_http, &HttpStockClient::fetchError, this, [this](const QString &msg) {
-        statusBar()->showMessage(tr("股票列表 HTTP 错误: %1").arg(msg), 8000);
+        statusBar()->showMessage(tr("HTTP 错误: %1").arg(msg), 8000);
     });
 
     connect(m_tcp, &TcpCandleClient::connectedChanged, this, [this](bool on) {
@@ -114,6 +116,7 @@ void MainWindow::wireConnections()
 void MainWindow::fetchStockList()
 {
     m_http->fetchStockList(m_httpBaseUrl);
+    m_http->fetchStrategyList(m_httpBaseUrl);
 }
 
 void MainWindow::connectIfNeeded()

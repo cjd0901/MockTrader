@@ -38,6 +38,7 @@ public slots:
     void setBacktestRunning(bool running);
     void setBacktestError(const QString &message);
     void setKlineFileTimeRange(const QString &symbol, qint64 minTsSec, qint64 maxTsSec);
+    void setBacktestStrategies(const QVector<StrategyRow> &strategies);
 
 signals:
     void backRequested();

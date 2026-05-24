@@ -8,18 +8,7 @@
 #include <QMouseEvent>
 #include <QStyle>
 
-namespace {
-
-struct StrategyOption {
-    const char *id;
-    const char *labelUtf8;
-};
-
-const StrategyOption kStrategies[] = {
-    {"macd_cross", "MACD金叉买入 / 死叉卖出"},
-};
-
-} // namespace
+#include <algorithm>
 
 StrategyPicker::StrategyPicker(QWidget *parent)
     : QFrame(parent)
@@ -50,10 +39,6 @@ StrategyPicker::StrategyPicker(QWidget *parent)
     row->addWidget(m_chevron, 0, Qt::AlignRight | Qt::AlignVCenter);
 
     m_menu->setObjectName(QStringLiteral("backtestStrategyMenu"));
-    for (const StrategyOption &opt : kStrategies) {
-        QAction *action = m_menu->addAction(QString::fromUtf8(opt.labelUtf8));
-        action->setData(QString::fromUtf8(opt.id));
-    }
     connect(m_menu, &QMenu::triggered, this, [this](QAction *action) {
         if (!action) {
             return;
@@ -68,20 +53,47 @@ StrategyPicker::StrategyPicker(QWidget *parent)
     });
     connect(m_menu, &QMenu::aboutToHide, this, [this]() { applyOpenState(false); });
 
-    setCurrentStrategy(QStringLiteral("macd_cross"));
+    m_label->setText(tr("加载策略…"));
+}
+
+void StrategyPicker::setStrategies(const QVector<StrategyRow> &strategies)
+{
+    m_strategies = strategies;
+    m_menu->clear();
+
+    for (const StrategyRow &row : m_strategies) {
+        QAction *action = m_menu->addAction(row.displayName);
+        action->setData(row.id);
+    }
+
+    if (m_strategies.isEmpty()) {
+        m_currentId.clear();
+        m_label->setText(tr("无可用策略"));
+        return;
+    }
+
+    if (m_currentId.isEmpty()
+        || !std::any_of(m_strategies.cbegin(), m_strategies.cend(),
+                        [this](const StrategyRow &r) { return r.id == m_currentId; })) {
+        setCurrentStrategy(m_strategies.first().id);
+    } else {
+        setCurrentStrategy(m_currentId);
+    }
 }
 
 void StrategyPicker::setCurrentStrategy(const QString &strategyId)
 {
-    for (const StrategyOption &opt : kStrategies) {
-        if (strategyId == QLatin1String(opt.id)) {
+    for (const StrategyRow &row : m_strategies) {
+        if (strategyId == row.id) {
             m_currentId = strategyId;
-            m_label->setText(QString::fromUtf8(opt.labelUtf8));
+            m_label->setText(row.displayName);
             return;
         }
     }
-    m_currentId = QString::fromUtf8(kStrategies[0].id);
-    m_label->setText(QString::fromUtf8(kStrategies[0].labelUtf8));
+    if (!m_strategies.isEmpty()) {
+        m_currentId = m_strategies.first().id;
+        m_label->setText(m_strategies.first().displayName);
+    }
 }
 
 void StrategyPicker::applyOpenState(bool open)
@@ -94,6 +106,9 @@ void StrategyPicker::applyOpenState(bool open)
 
 void StrategyPicker::openMenu()
 {
+    if (m_strategies.isEmpty()) {
+        return;
+    }
     applyOpenState(true);
     m_menu->setFixedWidth(width());
     const QPoint pos = mapToGlobal(QPoint(0, height() + 2));

@@ -167,6 +167,27 @@ Tune bar counts in `client/src/KlineLoadConfig.h` (`VisibleBarCount`, `InitialBa
 }
 ```
 
+### Strategy list
+
+`GET /api/strategies` → JSON (entries come from `data/strategies.toml`, filtered to enabled strategies with a server implementation):
+
+```json
+{
+  "strategies": [
+    { "id": "macd_cross", "displayName": "MACD golden cross buy / death cross sell" }
+  ]
+}
+```
+
+Configure with `STRATEGIES_FILE` (default `data/strategies.toml`):
+
+```toml
+[[strategy]]
+id = "macd_cross"
+name = "MACD golden cross buy / death cross sell"
+enabled = true
+```
+
 ### K-line file time range
 
 `GET /api/kline/range?symbol=002475` → JSON:

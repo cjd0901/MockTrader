@@ -19,6 +19,12 @@ struct StockRow
     QString displayName;
 };
 
+struct StrategyRow
+{
+    QString id;
+    QString displayName;
+};
+
 struct TradeSignal
 {
     quint64 barIndex = 0;

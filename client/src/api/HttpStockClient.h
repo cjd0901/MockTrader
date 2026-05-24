@@ -17,10 +17,12 @@ public:
     ~HttpStockClient() override;
 
     void fetchStockList(const QUrl &baseUrl);
+    void fetchStrategyList(const QUrl &baseUrl);
     void fetchKlineRange(const QUrl &baseUrl, const QString &symbol);
 
 signals:
     void stockListReceived(const QVector<StockRow> &stocks);
+    void strategyListReceived(const QVector<StrategyRow> &strategies);
     void klineRangeReceived(const QString &symbol, qint64 minTs, qint64 maxTs, quint64 totalBars);
     void fetchError(const QString &message);
 

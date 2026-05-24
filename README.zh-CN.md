@@ -167,6 +167,27 @@ cmake --build build -j
 }
 ```
 
+### 量化策略列表
+
+`GET /api/strategies` → JSON（由 `data/strategies.toml` 配置，仅返回已启用且服务端已实现的策略）：
+
+```json
+{
+  "strategies": [
+    { "id": "macd_cross", "displayName": "MACD金叉买入 / 死叉卖出" }
+  ]
+}
+```
+
+配置文件路径可通过环境变量 `STRATEGIES_FILE` 指定（默认 `data/strategies.toml`）：
+
+```toml
+[[strategy]]
+id = "macd_cross"
+name = "MACD金叉买入 / 死叉卖出"
+enabled = true
+```
+
 ### K 线文件时间范围
 
 `GET /api/kline/range?symbol=002475` → JSON：

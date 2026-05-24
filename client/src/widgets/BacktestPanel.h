@@ -17,6 +17,7 @@ public:
     explicit BacktestPanel(QWidget *parent = nullptr);
 
     /// Full range from server file (resets pickers to file min/max).
+    void setStrategies(const QVector<StrategyRow> &strategies);
     void setFileTimeRange(qint64 minTsSec, qint64 maxTsSec);
     /// Widen selectable range when more K-line history is loaded (keeps user selection).
     void expandLoadedRange(qint64 minTsSec, qint64 maxTsSec);

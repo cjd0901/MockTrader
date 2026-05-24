@@ -20,7 +20,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cfg = config::Config::from_env()?;
     let kline = Arc::new(kline::KlineStore::new(cfg.kline_dir.clone()));
-    let state = api::AppState { kline };
+    let strategies = Arc::new(strategy::StrategyCatalog::from_config_path(&cfg.strategies_file)?);
+    tracing::info!(
+        "loaded {} strategies from {}",
+        strategies.list().len(),
+        cfg.strategies_file.display()
+    );
+    let state = api::AppState { kline, strategies };
 
     let http_listener = api::bind_http(cfg.http_listen).await?;
     let http_state = state.clone();
@@ -33,10 +39,11 @@ async fn main() -> anyhow::Result<()> {
 
     let tcp_listener = tokio::net::TcpListener::bind(cfg.tcp_listen).await?;
     tracing::info!(
-        "tcp listening on {}, http on {}, kline dir {}",
+        "tcp listening on {}, http on {}, kline dir {}, strategies {}",
         cfg.tcp_listen,
         http_addr,
-        cfg.kline_dir.display()
+        cfg.kline_dir.display(),
+        cfg.strategies_file.display()
     );
     api::run_tcp(tcp_listener, state).await?;
     Ok(())

@@ -765,6 +765,11 @@ void StockDetailPage::setKlineFileTimeRange(const QString &symbol, qint64 minTsS
     updateBacktestTimeBounds();
 }
 
+void StockDetailPage::setBacktestStrategies(const QVector<StrategyRow> &strategies)
+{
+    m_backtestPanel->setStrategies(strategies);
+}
+
 void StockDetailPage::updateBacktestTimeBounds()
 {
     if (m_candles.isEmpty()) {
