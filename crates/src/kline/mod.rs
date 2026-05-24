@@ -76,17 +76,13 @@ impl KlineStore {
         let (closes, highs, lows) = ohlc_from_records(&warmup_buf);
         let series = compute_from_ohlc(&closes, &highs, &lows);
         let offset = (start - warmup_start) as usize;
-        let window = IndicatorSeriesSlice {
-            macd_dif: &series.macd_dif[offset..],
-            macd_dea: &series.macd_dea[offset..],
-            macd_bar: &series.macd_bar[offset..],
-            kdj_k: &series.kdj_k[offset..],
-            kdj_d: &series.kdj_d[offset..],
-            kdj_j: &series.kdj_j[offset..],
-        };
-        let indicators = encode_values_slice(&window);
+        let end = offset + records.len() / KLINE_RECORD_SIZE;
+        let indicators = indicators::encode_wire_range(&series, offset, end);
 
-        debug_assert_eq!(records.len() / KLINE_RECORD_SIZE, indicators.len() / indicators::INDICATOR_VALUES_SIZE);
+        debug_assert_eq!(
+            records.len() / KLINE_RECORD_SIZE,
+            indicators.len() / indicators::INDICATOR_VALUES_SIZE
+        );
 
         Ok((start, total, records, indicators))
     }
@@ -200,30 +196,6 @@ fn parse_stock_from_filename(name: Option<&str>) -> Option<StockEntry> {
         symbol: symbol.to_string(),
         display_name: display_name.to_string(),
     })
-}
-
-struct IndicatorSeriesSlice<'a> {
-    macd_dif: &'a [i32],
-    macd_dea: &'a [i32],
-    macd_bar: &'a [i32],
-    kdj_k: &'a [i32],
-    kdj_d: &'a [i32],
-    kdj_j: &'a [i32],
-}
-
-fn encode_values_slice(s: &IndicatorSeriesSlice<'_>) -> Vec<u8> {
-    let n = s.macd_dif.len();
-    let mut out = Vec::with_capacity(n * indicators::INDICATOR_VALUES_SIZE);
-    for i in 0..n {
-        out.extend_from_slice(&s.macd_dif[i].to_le_bytes());
-        out.extend_from_slice(&s.macd_dea[i].to_le_bytes());
-        out.extend_from_slice(&s.macd_bar[i].to_le_bytes());
-        out.extend_from_slice(&s.kdj_k[i].to_le_bytes());
-        out.extend_from_slice(&s.kdj_d[i].to_le_bytes());
-        out.extend_from_slice(&s.kdj_j[i].to_le_bytes());
-    }
-    debug_assert_eq!(out.len(), n * indicators::INDICATOR_VALUES_SIZE);
-    out
 }
 
 async fn read_record_bytes(path: &Path, start_index: u64, count: u64) -> anyhow::Result<Vec<u8>> {

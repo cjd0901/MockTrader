@@ -47,21 +47,22 @@ MockTrader 是一款**本地优先**的量化历史回测软件，面向 A 股�
 
 ```
 MockTrader/
-├── Cargo.toml
-├── crates/src/api/         # 服务端 HTTP + TCP + API 模型
-├── client/src/
-│   ├── app/                # 主题、品牌、加载配置
-│   ├── model/              # 行情数据结构
-│   ├── protocol/           # TCP K 线编解码
-│   ├── api/                # HTTP 列表 + TCP K 线
-│   ├── pages/              # 首页与详情
-│   └── widgets/
+├── crates/src/             # Rust 服务端
+│   ├── api/                # HTTP + TCP
+│   ├── kline/              # .bin 读写、回测窗口
+│   ├── protocol/           # TCP 协议（见 docs/PROTOCOL.md）
+│   ├── strategy/           # 回测策略
+│   └── indicators/         # MACD / KDJ
+├── client/src/             # Qt 6 客户端
+│   ├── app/                # 主题、ServerConfig、加载配置
+│   ├── api/                # HTTP / TCP 客户端
+│   ├── protocol/           # TCP 解码（与服务端一致）
+│   ├── pages/              # 首页、详情页
+│   └── widgets/            # 图表、回测面板
 ├── docs/
-│   ├── logo.png
-│   ├── example.png
-│   └── ARCHITECTURE.md
 └── data/
-    ├── scripts/get_5min.py
+    ├── config/strategies.toml
+    ├── scripts/
     └── kline/5min/
 ```
 
@@ -169,7 +170,7 @@ cmake --build build -j
 
 ### 量化策略列表
 
-`GET /api/strategies` → JSON（由 `data/strategies.toml` 配置，仅返回已启用且服务端已实现的策略）：
+`GET /api/strategies` → JSON（由 `data/config/strategies.toml` 配置，仅返回已启用且服务端已实现的策略）：
 
 ```json
 {
@@ -179,7 +180,7 @@ cmake --build build -j
 }
 ```
 
-配置文件路径可通过环境变量 `STRATEGIES_FILE` 指定（默认 `data/strategies.toml`）：
+配置文件路径可通过环境变量 `STRATEGIES_FILE` 指定（默认 `data/config/strategies.toml`）：
 
 ```toml
 [[strategy]]
@@ -246,7 +247,7 @@ enabled = true
 
 `GetCandles` 未带 `before_index` 时返回文件末尾（最新）的 `limit` 条记录。
 
-详见 `docs/ARCHITECTURE.md`、`crates/src/protocol/candle.rs`。
+详见 `docs/PROTOCOL.md`、`crates/src/protocol/`。
 
 ## 开发说明
 

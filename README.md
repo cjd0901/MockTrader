@@ -47,22 +47,23 @@ The stack is a **Rust TCP server** (data + indicators + future simulation engine
 
 ```
 MockTrader/
-├── Cargo.toml
-├── crates/src/api/         # server HTTP + TCP + API models
-├── client/src/
-│   ├── app/                # theme, branding, load config
-│   ├── model/              # shared market types
-│   ├── protocol/           # TCP candle codec
-│   ├── api/                # HTTP stock list + TCP candles
-│   ├── pages/              # home & detail UI
-│   └── widgets/
-├── docs/
-│   ├── logo.png
-│   ├── example.png
-│   └── ARCHITECTURE.md
+├── crates/src/             # Rust server
+│   ├── api/                # HTTP + TCP
+│   ├── kline/              # .bin I/O, backtest window
+│   ├── protocol/           # TCP wire format (see docs/PROTOCOL.md)
+│   ├── strategy/           # backtest algorithms
+│   └── indicators/         # MACD / KDJ
+├── client/src/             # Qt 6 desktop
+│   ├── app/                # theme, ServerConfig, load limits
+│   ├── api/                # HTTP + TCP clients
+│   ├── protocol/           # TCP decode (mirrors server)
+│   ├── pages/              # home, stock detail
+│   └── widgets/            # chart controls, backtest panel
+├── docs/                   # PROTOCOL.md, ARCHITECTURE.md, example.png
 └── data/
-    ├── scripts/get_5min.py
-    └── kline/5min/
+    ├── config/strategies.toml
+    ├── scripts/            # get_5min.py, stocks.toml
+    └── kline/5min/         # *.bin market data
 ```
 
 ```mermaid
@@ -169,7 +170,7 @@ Tune bar counts in `client/src/KlineLoadConfig.h` (`VisibleBarCount`, `InitialBa
 
 ### Strategy list
 
-`GET /api/strategies` → JSON (entries come from `data/strategies.toml`, filtered to enabled strategies with a server implementation):
+`GET /api/strategies` → JSON (entries come from `data/config/strategies.toml`, filtered to enabled strategies with a server implementation):
 
 ```json
 {
@@ -179,7 +180,7 @@ Tune bar counts in `client/src/KlineLoadConfig.h` (`VisibleBarCount`, `InitialBa
 }
 ```
 
-Configure with `STRATEGIES_FILE` (default `data/strategies.toml`):
+Configure with `STRATEGIES_FILE` (default `data/config/strategies.toml`):
 
 ```toml
 [[strategy]]
@@ -246,7 +247,7 @@ Each bar: **32-byte candle** + **24-byte indicators** (6× `i32` LE, value = rou
 
 `GetCandles` without `before_index` returns the latest `limit` records at the end of the file.
 
-Details: `docs/ARCHITECTURE.md`, `crates/src/protocol/candle.rs`.
+Details: `docs/PROTOCOL.md`, `crates/src/protocol/`.
 
 ## Development
 

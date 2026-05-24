@@ -1,5 +1,7 @@
 //! MACD (12, 26, 9) and KDJ (9) — aligned with the former Qt client logic.
 
+pub use crate::protocol::INDICATOR_PACK_SIZE as INDICATOR_VALUES_SIZE;
+
 const MACD_FAST: usize = 12;
 const MACD_SLOW: usize = 26;
 const MACD_SIGNAL: usize = 9;
@@ -106,8 +108,21 @@ pub fn compute_from_ohlc(closes: &[f64], highs: &[f64], lows: &[f64]) -> Indicat
     out
 }
 
-/// 6×i32 LE per bar: dif, dea, bar, k, d, j (each = round(value×100), `INDICATOR_INVALID` if N/A)
-pub const INDICATOR_VALUES_SIZE: usize = 24;
+/// Encode `series[start..end]` to TCP wire bytes (6× i32 LE per bar).
+pub fn encode_wire_range(series: &IndicatorSeries, start: usize, end: usize) -> Vec<u8> {
+    let n = end.saturating_sub(start);
+    let mut out = Vec::with_capacity(n * INDICATOR_VALUES_SIZE);
+    for i in start..end {
+        out.extend_from_slice(&series.macd_dif[i].to_le_bytes());
+        out.extend_from_slice(&series.macd_dea[i].to_le_bytes());
+        out.extend_from_slice(&series.macd_bar[i].to_le_bytes());
+        out.extend_from_slice(&series.kdj_k[i].to_le_bytes());
+        out.extend_from_slice(&series.kdj_d[i].to_le_bytes());
+        out.extend_from_slice(&series.kdj_j[i].to_le_bytes());
+    }
+    debug_assert_eq!(out.len(), n * INDICATOR_VALUES_SIZE);
+    out
+}
 
 fn stored_slice_to_f64(src: &[i32]) -> Vec<f64> {
     src.iter().map(|&v| stored_to_f64(v)).collect()

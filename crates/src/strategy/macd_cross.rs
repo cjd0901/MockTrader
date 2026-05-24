@@ -12,10 +12,6 @@ impl Strategy for MacdCrossStrategy {
         "macd_cross"
     }
 
-    fn display_name(&self) -> &'static str {
-        "MACD golden cross buy / death cross sell"
-    }
-
     fn generate_signals(&self, ctx: &StrategyContext<'_>) -> Vec<TradeSignal> {
         let n = ctx
             .closes

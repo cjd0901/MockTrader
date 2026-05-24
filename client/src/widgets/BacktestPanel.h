@@ -38,8 +38,7 @@ private:
     void clampTimeInputs();
     void setTimeEditText(QLineEdit *edit, qint64 tsSec);
     qint64 parseTimeEdit(const QLineEdit *edit, bool *ok) const;
-    void showPnlCard(bool show);
-    void setPnlPlaceholder(const QString &text);
+    void showPlaceholderPage(const QString &text);
 
     QLabel *makeFieldLabel(const QString &text, QWidget *parent);
     QLabel *makeMetricValue(const QString &objectName, QWidget *parent);

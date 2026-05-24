@@ -11,27 +11,52 @@
 
 namespace {
 
-QByteArray encodeFrame(quint8 msgType, const QByteArray &payload)
-{
-    QByteArray frame;
-    const quint32 len = static_cast<quint32>(payload.size());
-    frame.resize(5 + payload.size());
-    frame[0] = static_cast<char>(msgType);
-    frame[1] = static_cast<char>(len & 0xFF);
-    frame[2] = static_cast<char>((len >> 8) & 0xFF);
-    frame[3] = static_cast<char>((len >> 16) & 0xFF);
-    frame[4] = static_cast<char>((len >> 24) & 0xFF);
-    if (!payload.isEmpty()) {
-        std::memcpy(frame.data() + 5, payload.constData(), static_cast<size_t>(payload.size()));
-    }
-    return frame;
-}
-
 qint32 readI32(const char *p)
 {
     qint32 v = 0;
     std::memcpy(&v, p, 4);
     return qFromLittleEndian<qint32>(v);
+}
+
+quint32 readU32(const char *p)
+{
+    quint32 v = 0;
+    std::memcpy(&v, p, 4);
+    return qFromLittleEndian<quint32>(v);
+}
+
+quint64 readU64(const char *p)
+{
+    quint64 v = 0;
+    std::memcpy(&v, p, 8);
+    return qFromLittleEndian<quint64>(v);
+}
+
+void writeU32(QByteArray &out, quint32 v)
+{
+    const quint32 le = qToLittleEndian(v);
+    out.append(reinterpret_cast<const char *>(&le), 4);
+}
+
+void writeU64(QByteArray &out, quint64 v)
+{
+    const quint64 le = qToLittleEndian(v);
+    out.append(reinterpret_cast<const char *>(&le), 8);
+}
+
+QByteArray encodeFrame(quint8 msgType, const QByteArray &payload)
+{
+    QByteArray frame;
+    const quint32 len = static_cast<quint32>(payload.size());
+    frame.resize(TcpCandle::FrameHeaderSize + payload.size());
+    frame[0] = static_cast<char>(msgType);
+    const quint32 lenLe = qToLittleEndian(len);
+    std::memcpy(frame.data() + 1, &lenLe, 4);
+    if (!payload.isEmpty()) {
+        std::memcpy(frame.data() + TcpCandle::FrameHeaderSize, payload.constData(),
+                    static_cast<size_t>(payload.size()));
+    }
+    return frame;
 }
 
 qint64 candleUnixTs(qint32 date, qint32 time)
@@ -69,50 +94,95 @@ QByteArray encodeGetCandlesRequest(const QString &symbol, std::optional<quint64>
 
     if (beforeIndex) {
         payload.append(static_cast<char>(1));
-        const quint64 idx = *beforeIndex;
-        for (int i = 0; i < 8; ++i) {
-            payload.append(static_cast<char>((idx >> (8 * i)) & 0xFF));
-        }
+        writeU64(payload, *beforeIndex);
     } else {
         payload.append(static_cast<char>(0));
-        payload.append(QByteArray(8, '\0'));
+        writeU64(payload, 0);
     }
-
-    for (int i = 0; i < 4; ++i) {
-        payload.append(static_cast<char>((limit >> (8 * i)) & 0xFF));
-    }
+    writeU32(payload, limit);
 
     return encodeFrame(MsgReqGetCandles, payload);
 }
 
+std::optional<Frame> decodeFrame(const QByteArray &frame)
+{
+    if (frame.size() < FrameHeaderSize) {
+        return std::nullopt;
+    }
+    const quint32 len = readU32(frame.constData() + 1);
+    if (static_cast<quint32>(frame.size()) != FrameHeaderSize + len) {
+        return std::nullopt;
+    }
+    Frame out;
+    out.msgType = static_cast<quint8>(frame[0]);
+    out.payload = frame.mid(FrameHeaderSize, static_cast<int>(len));
+    return out;
+}
+
+std::optional<CandleChunk> decodeCandleChunkPayload(const QByteArray &payload)
+{
+    if (payload.size() < CandleChunkHeaderSize) {
+        return std::nullopt;
+    }
+
+    const char *base = payload.constData();
+    CandleChunk chunk;
+    chunk.startIndex = readU64(base);
+    chunk.total = readU64(base + 8);
+
+    const QByteArray body = payload.mid(CandleChunkHeaderSize);
+    if (body.isEmpty()) {
+        return chunk;
+    }
+
+    if (body.size() % ChunkBodyBarBytes != 0) {
+        return std::nullopt;
+    }
+
+    const int barCount = body.size() / ChunkBodyBarBytes;
+    const int recordsLen = barCount * KlineRecordSize;
+    chunk.records = body.left(recordsLen);
+    chunk.indicators = body.mid(recordsLen);
+    return chunk;
+}
+
+std::optional<QString> decodeErrorPayload(const QByteArray &payload)
+{
+    if (payload.size() < 2) {
+        return std::nullopt;
+    }
+    quint16 textLen = 0;
+    std::memcpy(&textLen, payload.constData(), 2);
+    textLen = qFromLittleEndian<quint16>(textLen);
+    if (payload.size() < 2 + textLen) {
+        return std::nullopt;
+    }
+    return QString::fromUtf8(payload.mid(2, textLen));
+}
+
 QVector<CandleBar> decodeRecords(const QByteArray &records)
 {
-    if (records.size() % RecordSize != 0) {
+    if (records.size() % KlineRecordSize != 0) {
         return {};
     }
 
-    const int count = records.size() / RecordSize;
+    const int count = records.size() / KlineRecordSize;
     QVector<CandleBar> out;
     out.reserve(count);
 
     const char *base = records.constData();
     for (int i = 0; i < count; ++i) {
-        const char *p = base + i * RecordSize;
-        const qint32 date = readI32(p);
-        const qint32 time = readI32(p + 4);
-        const qint32 open = readI32(p + 8);
-        const qint32 high = readI32(p + 12);
-        const qint32 low = readI32(p + 16);
-        const qint32 close = readI32(p + 20);
-        const qint32 volume = readI32(p + 24);
+        const char *p = base + i * KlineRecordSize;
+        const qint32 date = readI32(p + KlineOff::Date);
+        const qint32 time = readI32(p + KlineOff::Time);
 
         CandleBar b;
         b.tsSec = candleUnixTs(date, time);
-        b.open = open / 100.0;
-        b.high = high / 100.0;
-        b.low = low / 100.0;
-        b.close = close / 100.0;
-        b.volume = volume;
+        b.open = readI32(p + KlineOff::Open) / 100.0;
+        b.high = readI32(p + KlineOff::High) / 100.0;
+        b.low = readI32(p + KlineOff::Low) / 100.0;
+        b.close = readI32(p + KlineOff::Close) / 100.0;
+        b.volume = readI32(p + KlineOff::Volume);
         out.push_back(b);
     }
 
@@ -121,7 +191,7 @@ QVector<CandleBar> decodeRecords(const QByteArray &records)
 
 QVector<IndicatorBar> decodeIndicators(const QByteArray &indicators, int barCount)
 {
-    const int expected = barCount * IndicatorValuesSize;
+    const int expected = barCount * IndicatorPackSize;
     if (barCount <= 0 || indicators.size() != expected) {
         return {};
     }
@@ -138,14 +208,14 @@ QVector<IndicatorBar> decodeIndicators(const QByteArray &indicators, int barCoun
     };
 
     for (int i = 0; i < barCount; ++i) {
-        const int base = i * IndicatorValuesSize;
+        const int base = i * IndicatorPackSize;
         IndicatorBar b;
-        std::tie(b.macdDif, b.macdDifValid) = readStored(base);
-        std::tie(b.macdDea, b.macdDeaValid) = readStored(base + 4);
-        std::tie(b.macdBar, b.macdBarValid) = readStored(base + 8);
-        std::tie(b.kdjK, b.kdjKValid) = readStored(base + 12);
-        std::tie(b.kdjD, b.kdjDValid) = readStored(base + 16);
-        std::tie(b.kdjJ, b.kdjJValid) = readStored(base + 20);
+        std::tie(b.macdDif, b.macdDifValid) = readStored(base + IndOff::MacdDif);
+        std::tie(b.macdDea, b.macdDeaValid) = readStored(base + IndOff::MacdDea);
+        std::tie(b.macdBar, b.macdBarValid) = readStored(base + IndOff::MacdBar);
+        std::tie(b.kdjK, b.kdjKValid) = readStored(base + IndOff::KdjK);
+        std::tie(b.kdjD, b.kdjDValid) = readStored(base + IndOff::KdjD);
+        std::tie(b.kdjJ, b.kdjJValid) = readStored(base + IndOff::KdjJ);
         out.push_back(b);
     }
     return out;

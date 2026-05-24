@@ -364,8 +364,7 @@ BacktestPanel::BacktestPanel(QWidget *parent)
     layout->addWidget(m_statusLabel);
     layout->addWidget(m_pnlCard, 1);
 
-    showPnlCard(true);
-    setPnlPlaceholder(tr("回测完成后在此显示收益与交易统计"));
+    showPlaceholderPage(tr("回测完成后在此显示收益与交易统计"));
 
     connect(m_runButton, &QPushButton::clicked, this, &BacktestPanel::onRunClicked);
     connect(m_startTime, &QLineEdit::editingFinished, this, &BacktestPanel::onTimeEditingFinished);
@@ -407,12 +406,7 @@ QWidget *BacktestPanel::makeMetricRow(const QString &caption, QLabel *valueLabel
     return row;
 }
 
-void BacktestPanel::showPnlCard(bool show)
-{
-    m_pnlCard->setVisible(show);
-}
-
-void BacktestPanel::setPnlPlaceholder(const QString &text)
+void BacktestPanel::showPlaceholderPage(const QString &text)
 {
     m_pnlPlaceholder->setText(text);
     m_pnlStack->setCurrentIndex(0);
@@ -618,13 +612,13 @@ void BacktestPanel::setResultText(const QString &text)
         setStatusError(m_statusLabel, true);
         m_statusLabel->setText(text);
         m_statusLabel->show();
-        setPnlPlaceholder(tr("请修正参数后重新回测"));
+        showPlaceholderPage(tr("请修正参数后重新回测"));
         return;
     }
     setStatusError(m_statusLabel, false);
     m_statusLabel->clear();
     m_statusLabel->hide();
-    setPnlPlaceholder(text);
+    showPlaceholderPage(text);
 }
 
 void BacktestPanel::onRunClicked()

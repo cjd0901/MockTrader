@@ -26,7 +26,10 @@ src/
   strategy/        # Strategy trait, TOML catalog, registry, MACD cross, PnL
   indicators/      # MACD/KDJ → i32×100 wire values
   protocol/
-    candle.rs      # TCP framing & GetCandles codec
+    frame.rs           # [type][u32 len][payload]
+    messages.rs        # GetCandles / CandleChunk / Error
+    kline_record.rs    # 32-byte OHLCV layout
+    indicator_pack.rs  # 24-byte MACD+KDJ layout
 ```
 
 **Candle path:** client `GetCandles` → `KlineStore::read_candles_raw` (warmup + indicators) → `CandleChunk`.
@@ -49,12 +52,8 @@ MainWindow.cpp # wires HTTP list/range/backtest + TCP candles
 - **Startup:** `GET /api/strategies` → backtest strategy picker.
 - **Detail:** TCP candles; `GET /api/kline/range` for backtest time bounds; `POST /api/backtest` for signals/PnL overlay.
 
-Strategy metadata lives in `data/strategies.toml` (`STRATEGIES_FILE`); only `enabled` entries with a matching `Strategy` implementation are exposed and runnable.
+Strategy metadata lives in `data/config/strategies.toml` (`STRATEGIES_FILE`); only `enabled` entries with a matching `Strategy` implementation are exposed and runnable.
 
-## On-disk K-line format
+## On-disk K-line & TCP wire format
 
-32 bytes per bar (little-endian `i32` fields). See README for field layout.
-
-## Indicator wire format
-
-24 bytes per bar: 6× `i32` LE (`macd_dif`, `macd_dea`, `macd_bar`, `kdj_k`, `kdj_d`, `kdj_j`), value = `round(indicator × 100)`, `i32::MIN` = invalid.
+See `docs/PROTOCOL.md` for frame layout, `CandleChunk` body (`records` then `indicators`), and field offsets.

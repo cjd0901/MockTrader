@@ -2,11 +2,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::warn;
 
-use crate::protocol::{decode_request, encode_response, ClientRequest, ServerMessage};
+use crate::protocol::{
+    decode_request, encode_response, CandleChunkBody, ClientRequest, ErrorText, FRAME_HEADER_SIZE,
+    GetCandlesRequest, ServerMessage, MAX_FRAME_PAYLOAD,
+};
 
 use super::AppState;
-
-const MAX_FRAME: usize = 16 * 1024 * 1024 + 5;
 
 pub async fn run_listener(listener: TcpListener, state: AppState) -> anyhow::Result<()> {
     loop {
@@ -32,32 +33,31 @@ async fn handle_connection(mut stream: TcpStream, state: AppState) -> anyhow::Re
         let req = match decode_request(&frame) {
             Ok(r) => r,
             Err(e) => {
-                write_message(
-                    &mut stream,
-                    &ServerMessage::Error(format!("invalid request: {e:#}")),
-                )
-                .await?;
+                write_message(&mut stream, &server_error(format!("invalid request: {e:#}")))
+                    .await?;
                 continue;
             }
         };
 
         let resp = match req {
-            ClientRequest::GetCandles {
+            ClientRequest::GetCandles(GetCandlesRequest {
                 symbol,
                 before_index,
                 limit,
-            } => match state
+            }) => match state
                 .kline
                 .read_candles_raw(&symbol, before_index, limit)
                 .await
             {
-                Ok((start_index, total, records, indicators)) => ServerMessage::CandleChunk {
-                    start_index,
-                    total,
-                    records,
-                    indicators,
-                },
-                Err(e) => ServerMessage::Error(format!("read candles failed: {e:#}")),
+                Ok((start_index, total, records, indicators)) => {
+                    ServerMessage::CandleChunk(CandleChunkBody {
+                        start_index,
+                        total,
+                        records,
+                        indicators,
+                    })
+                }
+                Err(e) => server_error(format!("read candles failed: {e:#}")),
             },
         };
 
@@ -67,20 +67,24 @@ async fn handle_connection(mut stream: TcpStream, state: AppState) -> anyhow::Re
     Ok(())
 }
 
+fn server_error(message: String) -> ServerMessage {
+    ServerMessage::Error(ErrorText(message))
+}
+
 async fn read_frame(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
-    let mut header = [0u8; 5];
+    let mut header = [0u8; FRAME_HEADER_SIZE];
     stream.read_exact(&mut header).await?;
     let payload_len = u32::from_le_bytes(header[1..5].try_into().unwrap()) as usize;
-    if payload_len > MAX_FRAME {
+    if payload_len > MAX_FRAME_PAYLOAD {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "frame too large",
         ));
     }
-    let mut frame = vec![0u8; 5 + payload_len];
-    frame[..5].copy_from_slice(&header);
+    let mut frame = vec![0u8; FRAME_HEADER_SIZE + payload_len];
+    frame[..FRAME_HEADER_SIZE].copy_from_slice(&header);
     if payload_len > 0 {
-        stream.read_exact(&mut frame[5..]).await?;
+        stream.read_exact(&mut frame[FRAME_HEADER_SIZE..]).await?;
     }
     Ok(frame)
 }

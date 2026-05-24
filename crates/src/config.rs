@@ -36,7 +36,7 @@ impl Config {
 
         let strategies_file = std::env::var("STRATEGIES_FILE")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/strategies.toml"));
+            .unwrap_or_else(|_| PathBuf::from("data/config/strategies.toml"));
 
         Ok(Self {
             tcp_listen,

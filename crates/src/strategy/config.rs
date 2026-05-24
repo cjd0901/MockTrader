@@ -1,4 +1,4 @@
-//! Strategy list loaded from TOML configuration.
+//! Strategy list loaded from TOML (`data/config/strategies.toml` by default).
 
 use std::path::Path;
 
