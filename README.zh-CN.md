@@ -16,6 +16,10 @@ MockTrader 是一款**本地优先**的量化历史回测软件，面向 A 股�
 
 技术栈：**Rust TCP 服务端**（行情、指标、后续仿真引擎）+ **Qt 6 桌面客户端**（图表、交互、结果展示）。
 
+## 界面截图
+
+![MockTrader 桌面客户端](docs/example.png)
+
 ## 功能亮点
 
 | 能力 | 说明 |
@@ -54,6 +58,7 @@ MockTrader/
 │   └── widgets/
 ├── docs/
 │   ├── logo.png
+│   ├── example.png
 │   └── ARCHITECTURE.md
 └── data/
     ├── scripts/get_5min.py

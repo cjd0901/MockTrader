@@ -16,6 +16,10 @@ MockTrader is a **local-first quantitative backtesting platform** for Chinese A-
 
 The stack is a **Rust TCP server** (data + indicators + future simulation engine) and a **Qt 6 desktop client** (charts, controls, results).
 
+## Screenshot
+
+![MockTrader desktop client](docs/example.png)
+
 ## Highlights
 
 | Capability | Description |
@@ -54,6 +58,7 @@ MockTrader/
 │   └── widgets/
 ├── docs/
 │   ├── logo.png
+│   ├── example.png
 │   └── ARCHITECTURE.md
 └── data/
     ├── scripts/get_5min.py
