@@ -131,4 +131,16 @@ mod tests {
         assert!(!s.open_position);
         assert!((s.total_return_pct - 5.0).abs() < 1e-6);
     }
+
+    #[test]
+    fn ignores_duplicate_buy_while_holding() {
+        let signals = vec![
+            sig(SignalSide::Buy, 10.0),
+            sig(SignalSide::Buy, 9.0),
+            sig(SignalSide::Sell, 11.0),
+        ];
+        let s = compute_pnl(&signals, None);
+        assert_eq!(s.round_trips, 1);
+        assert!((s.total_return_pct - 10.0).abs() < 1e-6);
+    }
 }
