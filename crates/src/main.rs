@@ -28,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
     );
     let state = api::AppState { kline, strategies };
 
-    let http_listener = api::bind_http(cfg.http_listen).await?;
+    let http_listener = tokio::net::TcpListener::bind(cfg.http_listen).await?;
     let http_state = state.clone();
     let http_addr = cfg.http_listen;
     tokio::spawn(async move {
@@ -38,6 +38,12 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let tcp_listener = tokio::net::TcpListener::bind(cfg.tcp_listen).await?;
+    tokio::spawn(async move {
+        if let Err(e) = api::run_tcp(tcp_listener, state).await {
+            tracing::error!("tcp server exited: {e:#}");
+        }
+    });
+    
     tracing::info!(
         "tcp listening on {}, http on {}, kline dir {}, strategies {}",
         cfg.tcp_listen,
@@ -45,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
         cfg.kline_dir.display(),
         cfg.strategies_file.display()
     );
-    api::run_tcp(tcp_listener, state).await?;
+
+    tokio::signal::ctrl_c().await?;
     Ok(())
 }

@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use serde::Deserialize;
 use axum::{
     extract::Query,
@@ -16,10 +14,6 @@ use super::model::{
     StockListResponse, StrategyEntryJson, StrategyListResponse,
 };
 use super::AppState;
-
-pub async fn bind(addr: SocketAddr) -> anyhow::Result<TcpListener> {
-    Ok(TcpListener::bind(addr).await?)
-}
 
 pub async fn run(listener: TcpListener, state: AppState) -> anyhow::Result<()> {
     let app = Router::new()
